@@ -1,0 +1,223 @@
+# Morse Paddle
+
+A headless **Waveshare ESP32-S3-Zero** adapter that sends a passive iambic
+paddle to **Morse-it on iPhone as a BLE HID keyboard**. It starts advertising as
+**Morse Paddle** automatically at power-on. No menu, display or computer is
+needed during use.
+
+The adapter sends debounced contact states, not Morse characters or timed
+elements. **Morse-it generates the iambic timing and sidetone.** Native USB-C is
+only for programming, diagnostic serial and power: this is **not a wired USB
+HID keyboard**. There is no local keyer, sidetone, trainer, SD support, Wi-Fi or
+ESP-NOW.
+
+**Validation status:** host tests and the complete ESP32-S3 firmware build pass.
+This S3 firmware has **not yet been flashed or physically verified with the
+board/iPhone**. No USB serial device was available during development. Its
+report/debounce behavior comes from an ESP32 implementation already used with
+actual paddles in Morse-it; the S3 BLE backend adaptation still needs a hardware
+acceptance check.
+
+## Hardware and wiring
+
+Target: [Waveshare ESP32-S3-Zero](https://www.waveshare.com/wiki/ESP32-S3-Zero),
+ESP32-S3FH4R2, **4 MB flash, 2 MB QSPI PSRAM**, native USB-C.
+
+| Passive 3.5 mm TRS jack | Board connection | Function |
+| --- | --- | --- |
+| Tip | GPIO4 | Dit / Left Control |
+| Ring | GPIO5 | Dah / Right Control |
+| Sleeve | GND | Common return |
+
+Both contacts are configured as `INPUT_PULLUP`: a contact is pressed when it
+closes to GND. Verify the actual paddle plug and jack lug mapping with a
+continuity meter before connecting; some paddles reverse tip/ring. Swap those
+two leads if needed. The numbers above are **GPIO numbers**, not physical pin
+positions.
+
+GPIO4 and GPIO5 are exposed, non-strapping pins, separate from native USB
+GPIO19/20, flash/PSRAM and the onboard GPIO21 WS2812. Leave GPIO19/20 alone.
+For noisy or longer wiring, optional external **10 kOhm pullups from each input
+to 3.3 V** can supplement the internal pullups. Keep wiring short.
+**Never connect 5 V, transmitter/keying voltage, or a powered keyer output to
+these GPIOs.** This input is for isolated passive contacts only, not a
+transmitter keying interface.
+
+Power the board through USB-C from a computer, USB supply or power bank. Boot
+does not wait for Serial or a USB host. Some power banks shut off with a
+low-current load; use an always-on/low-current mode or an appropriate supply.
+No battery measurement or charging circuit is implemented. The HID battery
+service reports a fixed 100% for this USB-powered device.
+
+## Build
+
+Use **Arduino ESP32 core 3.3.8**, which includes the BLE library. Do not install
+a third-party `ESP32 BLE Keyboard` or `NimBLE-Arduino` library for this sketch.
+The build script checks the installed core version and does not install or
+upgrade dependencies automatically.
+
+```sh
+arduino-cli core update-index \
+  --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+arduino-cli core install esp32:esp32@3.3.8 \
+  --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+bash scripts/test.sh
+bash scripts/build.sh
+```
+
+The host tests require a C++17 compiler (`c++`, or set `CXX`). Set `ARDUINO_CLI`
+if the CLI is not on PATH. Standard `ARDUINO_DIRECTORIES_DATA` and
+`ARDUINO_DIRECTORIES_USER` environment variables can isolate the Arduino
+installation from other projects.
+
+Exact tested FQBN (also used by `scripts/build.sh`):
+
+```sh
+FQBN='esp32:esp32:esp32s3:USBMode=hwcdc,CDCOnBoot=cdc,MSCOnBoot=default,DFUOnBoot=default,UploadMode=default,CPUFreq=240,FlashMode=qio,FlashSize=4M,PartitionScheme=huge_app,PSRAM=enabled,DebugLevel=none,EraseFlash=none'
+arduino-cli compile --fqbn "$FQBN" --warnings all \
+  --build-path "$PWD/build/esp32s3" MorsePaddle
+```
+
+Equivalent Arduino IDE selections:
+
+| Setting | Value |
+| --- | --- |
+| Board | ESP32S3 Dev Module |
+| ESP32 package version | 3.3.8 |
+| USB Mode | Hardware CDC and JTAG |
+| USB CDC On Boot | Enabled |
+| USB Firmware MSC / DFU On Boot | Disabled |
+| Upload Mode | UART0 / Hardware CDC |
+| CPU Frequency | 240 MHz |
+| Flash Mode / Size | QIO 80 MHz / 4 MB |
+| Partition Scheme | Huge APP (3 MB No OTA / 1 MB SPIFFS) |
+| PSRAM | QSPI PSRAM |
+| Core Debug Level | None |
+| Erase All Flash Before Sketch Upload | Disabled (normally) |
+
+The large app partition leaves ample room; the filesystem partition is unused
+and no OTA updater is implemented. Build output is ignored by Git under
+`build/esp32s3/`, including `MorsePaddle.ino.bin`, its ELF, bootloader, partition
+table and merged image. Use the CLI upload command below so all images go to
+their correct offsets, rather than flashing the app binary at address zero.
+
+**S3 backend note:** core 3.3.8 builds ESP32-S3 with **NimBLE**, whereas the
+original ESP32 transport used Bluedroid. This project uses the core's unified
+`BLE*` APIs with native NimBLE connection/security/subscription callbacks,
+synchronous advertising-start results and automatically managed CCCDs. It
+does not fake a Bluedroid compile flag or use a manually added `BLE2902`.
+The version is pinned because BLE APIs and backend defaults differ across
+core versions.
+
+## Upload and BOOT recovery
+
+Use a known **USB data cable**. Once the board is visible, find its actual port:
+
+```sh
+arduino-cli board list
+```
+
+With `FQBN` set exactly as above, replace the example port with the detected one:
+
+```sh
+PORT='/dev/cu.usbmodem...'
+arduino-cli upload --fqbn "$FQBN" --port "$PORT" \
+  --input-dir "$PWD/build/esp32s3" MorsePaddle
+```
+
+If the board is not detected or the previous sketch prevents USB enumeration,
+hold **BOOT**, tap and release **RESET**, then release BOOT. Alternatively hold
+BOOT while plugging in USB-C. Select the newly enumerated port and upload.
+After upload, tap RESET if it remains in the ROM download loader. The serial
+port name can change between ROM download mode and the running firmware.
+If no USB device appears even in BOOT mode, check the cable, port and board
+power first; software cannot flash a device that the host does not enumerate.
+
+Normal uploads preserve Bluetooth bonds in NVS. For persistent stale-bond
+problems, **forget the device on the iPhone and deliberately erase board flash
+before reuploading**: in Arduino IDE enable *Erase All Flash Before Sketch
+Upload* for one upload, then restore Disabled. This removes **all** board data,
+including bonds, not just the application. No erase is performed by the build
+script, and there is no bond-reset button gesture or serial command.
+
+## iPhone and Morse-it
+
+1. Power the board. In iPhone **Settings > Bluetooth**, pair with **Morse Paddle**.
+   Pairing uses bonded, encrypted JustWorks with no passcode entry. JustWorks
+   does not provide MITM protection; pair in a trusted environment.
+2. In Morse-it, open **Settings > Hardware Interface > Iambic/Memory** and enable
+   **Keyboard Enabled**. Set **Dot = Left Control**, **Dash = Right Control**.
+3. Set **Key Type = Iambic A** or **Iambic B** to match your preference, and choose
+   speed/sidetone settings in Morse-it.
+4. Open **Tap** or **Start Sending Trainer**. In a keyboard event viewer, tap
+   its text area to give it focus before trying the paddles.
+5. Release **both** paddles after connection (and after resume or subscription
+   changes) to arm, then send normally.
+
+Left Control is modifier `0x01`, Right Control is `0x10`, and a squeeze is
+`0x11`. Each report has exactly eight bytes: modifier, zero reserved byte, six
+zero key usages. Releases send modifier `0x00`; holds remain held without
+artificial repeats or tap conversion. These are modifier events, **not
+printable text**, so an ordinary text field may show nothing.
+
+If Bluetooth says connected but Morse-it does nothing, check keyboard mapping,
+the active sending screen/focus, and that both paddles were released. Disconnect
+other hosts that may reconnect to the board. If iOS has cached an earlier
+keyboard profile, forget the old device and pair again. The distinct name
+avoids confusing it with *Morse Tutor*, but changing the name alone does not
+clear a cached identity/bond on the same physical board.
+
+## Diagnostics and behavior
+
+USB serial is 115200 baud, with **no boot wait and a zero write timeout**.
+Opening a serial monitor can reset some boards/USB configurations and interrupt
+BLE; reconnect and release both paddles afterward. Logging is best effort:
+without a reading host, messages may be dropped rather than delay keying.
+There are boot messages, BLE lifecycle/error messages and status transitions,
+not a log for every paddle edge or a continuous polling log.
+
+| Serial status | Meaning |
+| --- | --- |
+| Waiting | Advertising / waiting for iPhone |
+| Connected, waiting for HID subscription or resume | Link exists but reports are not ready |
+| Release BOTH paddles | Initial neutral report/released contacts required |
+| Ready | Encrypted, bonded, subscribed and armed |
+| ERROR | Read the preceding BLE error, then reset/power-cycle |
+
+The onboard RGB LED is **intentionally unused**, not a readiness indicator.
+Core `rgbLedWrite` waits for RMT completion; this firmware avoids that extra
+timing dependency. Diagnostics are serial-only, and normal use is headless.
+
+Contacts debounce independently for 5 ms on each edge. The loop yields for
+1 ms; BLE scheduling adds latency, so this is not a hard real-time wired keyer.
+A new connection, resubscription or resume sends neutral before arming and
+requires both contacts released. Failed notifications retry at 10 ms intervals,
+with three consecutive failures causing an explicit error and disconnect to
+release keys. Normal disconnects restart advertising automatically. Initialization
+and services are retained instead of allocating new services on reconnect.
+Pairing failures and advertising failures latch an error rather than silently
+pretending to be ready or repeatedly restarting.
+
+The host tests cover debounce/bounce, rollover, hold/release/squeeze report bytes,
+bond/encryption/subscription gating, reconnection, suspend/resume, neutral-send
+failure, service reuse, bounded notification failures, advertising failures and
+the actual sketch's host-independent startup/GPIO mapping/status logging.
+They simulate the BLE API; they do not prove over-the-air pairing or latency.
+
+Before relying on this build, verify on the actual S3 board: first pairing,
+individual holds/releases and squeeze in Morse-it, reconnect/power-cycle with
+both paddles held, resume, and operation on USB power without a computer.
+
+## Provenance and license
+
+`BlePaddleKeyboard.{h,cpp}`, `PaddleInput.h`, and their original host tests/fakes
+were adapted from
+[`dcasati/morse-tutor` at `01b5c93f9198a7b5ae5febc1caab8cd6b04c2255`](https://github.com/dcasati/morse-tutor/commit/01b5c93f9198a7b5ae5febc1caab8cd6b04c2255).
+This separate project adds the S3/headless entry point, core NimBLE adaptation,
+stricter neutral/subscription/resume handling, additional tests and board-specific
+instructions. It does not modify the original tutor.
+
+Distributed under the [MIT license](LICENSE), retaining the upstream
+**Copyright (c) 2019 Bruce E. Hall** notice; the original tutor is not represented
+as newly authored here. Arduino-ESP32 and its bundled BLE/ESP-IDF components
+retain their own licenses and are installed separately, not vendored.
