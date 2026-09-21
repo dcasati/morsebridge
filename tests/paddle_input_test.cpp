@@ -1,4 +1,4 @@
-#include "../MorsePaddle/PaddleInput.h"
+#include "../MorseBridge/PaddleInput.h"
 
 #include <cassert>
 #include <cstdio>

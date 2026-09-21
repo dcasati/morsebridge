@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -36,10 +37,22 @@ inline void delay(uint32_t ms) {
 struct FakeSerial {
   unsigned baud = 0;
   uint32_t timeout = 1000;
+  int txSpace = 256;
+  bool consumeSpace = false;
+  void (*onWrite)() = nullptr;
   std::vector<std::string> lines;
   void begin(unsigned rate) { baud = rate; }
   void setTxTimeoutMs(uint32_t ms) { timeout = ms; }
-  void println(const char *text) { lines.emplace_back(text); }
-  template <typename... Args> void printf(const char *, Args...) {}
+  int availableForWrite() { return txSpace; }
+  size_t write(const uint8_t *data, size_t size) {
+    // The real HWCDC zero-timeout path can hang if asked to exceed this space.
+    assert(txSpace >= 0 && size <= static_cast<size_t>(txSpace));
+    if (onWrite) onWrite();
+    const size_t written = size < static_cast<size_t>(txSpace)
+        ? size : static_cast<size_t>(txSpace);
+    lines.emplace_back(reinterpret_cast<const char *>(data), written);
+    if (consumeSpace) txSpace -= static_cast<int>(written);
+    return written;
+  }
 };
 inline FakeSerial Serial;

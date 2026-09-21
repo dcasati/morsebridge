@@ -9,5 +9,5 @@ if ! "$cli" core list | grep -Eq '^esp32:esp32[[:space:]]+3\.3\.8([[:space:]]|$)
 fi
 mkdir -p build/esp32s3
 "$cli" compile --fqbn "$fqbn" --warnings all \
-  --build-path "$PWD/build/esp32s3" MorsePaddle
-printf '\nBuilt %s/build/esp32s3/MorsePaddle.ino.bin\nFQBN: %s\n' "$PWD" "$fqbn"
+  --build-path "$PWD/build/esp32s3" MorseBridge
+printf '\nBuilt %s/build/esp32s3/MorseBridge.ino.bin\nFQBN: %s\n' "$PWD" "$fqbn"

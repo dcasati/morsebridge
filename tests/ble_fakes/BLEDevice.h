@@ -33,7 +33,10 @@ public:
   unsigned attempts = 0;
 
   void setValue(const uint8_t *data, size_t size) { value.assign(data, data + size); }
-  void setValue(const char *) {}
+  void setValue(const char *text) {
+    const std::string str(text);
+    value.assign(str.begin(), str.end());
+  }
   void setCallbacks(BLECharacteristicCallbacks *cb) { callbacks = cb; }
   void subscribe(uint16_t value) {
     ble_gap_conn_desc desc;

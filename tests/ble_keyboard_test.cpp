@@ -1,5 +1,5 @@
 #include "ble_fakes/BLEDevice.h"
-#include "../MorsePaddle/BlePaddleKeyboard.h"
+#include "../MorseBridge/BlePaddleKeyboard.h"
 
 #include <cstdio>
 
@@ -29,7 +29,10 @@ int main() {
   assert(MorseBle::status() == Status::Error);
   Fake::initSucceeds = true;
   assert(MorseBle::begin());
-  assert(Fake::deviceName == "Morse Paddle");
+  assert(Fake::deviceName == "MorseBridge");
+  const std::string manufacturer(Fake::manufacturer.value.begin(),
+                                 Fake::manufacturer.value.end());
+  assert(manufacturer == "MorseBridge");
   assert(Fake::advertising && Fake::hidCreations == 1);
   assert(MorseBle::status() == Status::Waiting);
   assert(Fake::security->onSecurityRequest());
@@ -44,6 +47,10 @@ int main() {
   Fake::input.subscribe(1);
   sample(2, true, true);
   expectReport(0);
+  assert(MorseBle::diagnostics().queuedReports == 1);
+  assert(MorseBle::diagnostics().lastQueuedModifiers == 0);
+  assert(MorseBle::diagnostics().connected && MorseBle::diagnostics().authenticated);
+  assert(MorseBle::diagnostics().subscribed && !MorseBle::diagnostics().armed);
   assert(MorseBle::status() == Status::ReleasePaddles);
   sample(100, true, true);
   assert(Fake::input.reports.size() == 1);
@@ -57,6 +64,8 @@ int main() {
   sample(116, true, true);
   sample(121, true, true);  // Six ms later: must not be throttled away.
   expectReport(0x11);
+  assert(MorseBle::diagnostics().lastQueuedModifiers == 0x11);
+  assert(MorseBle::diagnostics().armed);
   sample(122, false, true);
   sample(127, false, true);
   expectReport(0x10);
@@ -67,6 +76,7 @@ int main() {
   // Reconnect even between update calls: cached/first reports must be neutral.
   Fake::server.disconnect(1);
   MorseBle::update(false, true);
+  assert(!MorseBle::diagnostics().connected && !MorseBle::diagnostics().armed);
   assert(Fake::advertisingStarts == 2);
   Fake::server.connect();
   assert(Fake::input.value[0] == 0);
@@ -111,8 +121,10 @@ int main() {
   sample(410, false, false);
   sample(415, false, false);
   Fake::input.notifySucceeds = false;
+  const auto queuedBeforeFailure = MorseBle::diagnostics().queuedReports;
   sample(420, true, false);
   sample(425, true, false);
+  assert(MorseBle::diagnostics().queuedReports == queuedBeforeFailure);
   const auto attempts = Fake::input.attempts;
   sample(426, true, false);
   assert(Fake::input.attempts == attempts);  // Failed report retry is bounded.
@@ -215,8 +227,59 @@ int main() {
   assert(MorseBle::begin());
   Fake::advertising = false;
   BLEDevice::getAdvertising()->onComplete(BLEDevice::getAdvertising());
+  sample(10000, false, false);
+  assert(MorseBle::status() == Status::Waiting);
+  sample(11999, false, false);
+  assert(MorseBle::status() == Status::Waiting);
+  sample(12000, false, false);
   assert(MorseBle::status() == Status::Error);
   assert(MorseBle::end());
   assert(!Fake::advertising);
+
+  // A bonded host can finish security/subscription before the connect callback.
+  assert(MorseBle::begin());
+  authenticate();
+  Fake::server.connect();
+  assert(MorseBle::diagnostics().authenticated);
+  assert(MorseBle::diagnostics().subscribed);
+  sample(800, false, false);
+  sample(805, false, false);
+  assert(MorseBle::status() == Status::Ready);
+  sample(810, true, false);
+  sample(815, true, false);
+  expectReport(1);
+  assert(MorseBle::end());
+  assert(!MorseBle::diagnostics().authenticated);
+  assert(!MorseBle::diagnostics().subscribed);
+
+  // A long advertising period must not consume the connection handoff grace.
+  assert(MorseBle::begin());
+  sample(20000, false, false);
+  Fake::advertising = false;
+  BLEDevice::getAdvertising()->onComplete(BLEDevice::getAdvertising());
+  sample(30000, false, false);
+  assert(MorseBle::status() == Status::Waiting);
+  Fake::server.connect();
+  authenticate();
+  sample(30001, false, false);
+  sample(30006, false, false);
+  assert(MorseBle::status() == Status::Ready);
+  assert(MorseBle::end());
+
+  // Recovery restarts the outage timer, including across millis rollover.
+  assert(MorseBle::begin());
+  Fake::advertising = false;
+  sample(UINT32_MAX - 999, false, false);
+  sample(999, false, false);
+  assert(MorseBle::status() == Status::Waiting);
+  Fake::advertising = true;
+  sample(1000, false, false);
+  Fake::advertising = false;
+  sample(1001, false, false);
+  sample(3000, false, false);
+  assert(MorseBle::status() == Status::Waiting);
+  sample(3001, false, false);
+  assert(MorseBle::status() == Status::Error);
+  assert(MorseBle::end());
   std::puts("BLE keyboard lifecycle tests passed");
 }

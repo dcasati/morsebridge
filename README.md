@@ -1,8 +1,8 @@
-# Morse Paddle
+# MorseBridge
 
 A headless **Waveshare ESP32-S3-Zero** adapter that sends a passive iambic
 paddle to **Morse-it on iPhone as a BLE HID keyboard**. It starts advertising as
-**Morse Paddle** automatically at power-on. No menu, display or computer is
+**MorseBridge** automatically at power-on. No menu, display or computer is
 needed during use.
 
 The adapter sends debounced contact states, not Morse characters or timed
@@ -11,12 +11,20 @@ only for programming, diagnostic serial and power: this is **not a wired USB
 HID keyboard**. There is no local keyer, sidetone, trainer, SD support, Wi-Fi or
 ESP-NOW.
 
+Repository: [dcasati/morsebridge](https://github.com/dcasati/morsebridge).
+The product name covers future key interfaces, but **this firmware still
+supports iambic paddles only**; straight-key mode has not been implemented.
+
 **Validation status:** host tests and the complete ESP32-S3 firmware build pass.
-This S3 firmware has **not yet been flashed or physically verified with the
-board/iPhone**. No USB serial device was available during development. Its
-report/debounce behavior comes from an ESP32 implementation already used with
-actual paddles in Morse-it; the S3 BLE backend adaptation still needs a hardware
-acceptance check.
+The S3 firmware has been flashed and observed starting BLE on the physical
+board. USB diagnostics have confirmed both GPIO inputs changing on paddle
+press/release, an encrypted/bonded/subscribed BLE connection, and accepted
+Left/Right Control and release reports. The user has also confirmed that paddle
+events appear in Morse-it on the iPhone. These observations do not replace the
+remaining reconnect, power-bank and timing acceptance checks below.
+Its report/debounce behavior comes from an ESP32 implementation already used
+with actual paddles in Morse-it; the S3 BLE backend adaptation still needs the
+hardware acceptance checks below.
 
 ## Hardware and wiring
 
@@ -75,7 +83,7 @@ Exact tested FQBN (also used by `scripts/build.sh`):
 ```sh
 FQBN='esp32:esp32:esp32s3:USBMode=hwcdc,CDCOnBoot=cdc,MSCOnBoot=default,DFUOnBoot=default,UploadMode=default,CPUFreq=240,FlashMode=qio,FlashSize=4M,PartitionScheme=huge_app,PSRAM=enabled,DebugLevel=none,EraseFlash=none'
 arduino-cli compile --fqbn "$FQBN" --warnings all \
-  --build-path "$PWD/build/esp32s3" MorsePaddle
+  --build-path "$PWD/build/esp32s3" MorseBridge
 ```
 
 Equivalent Arduino IDE selections:
@@ -97,7 +105,7 @@ Equivalent Arduino IDE selections:
 
 The large app partition leaves ample room; the filesystem partition is unused
 and no OTA updater is implemented. Build output is ignored by Git under
-`build/esp32s3/`, including `MorsePaddle.ino.bin`, its ELF, bootloader, partition
+`build/esp32s3/`, including `MorseBridge.ino.bin`, its ELF, bootloader, partition
 table and merged image. Use the CLI upload command below so all images go to
 their correct offsets, rather than flashing the app binary at address zero.
 
@@ -122,7 +130,7 @@ With `FQBN` set exactly as above, replace the example port with the detected one
 ```sh
 PORT='/dev/cu.usbmodem...'
 arduino-cli upload --fqbn "$FQBN" --port "$PORT" \
-  --input-dir "$PWD/build/esp32s3" MorsePaddle
+  --input-dir "$PWD/build/esp32s3" MorseBridge
 ```
 
 If the board is not detected or the previous sketch prevents USB enumeration,
@@ -142,7 +150,7 @@ script, and there is no bond-reset button gesture or serial command.
 
 ## iPhone and Morse-it
 
-1. Power the board. In iPhone **Settings > Bluetooth**, pair with **Morse Paddle**.
+1. Power the board. In iPhone **Settings > Bluetooth**, pair with **MorseBridge**.
    Pairing uses bonded, encrypted JustWorks with no passcode entry. JustWorks
    does not provide MITM protection; pair in a trusted environment.
 2. In Morse-it, open **Settings > Hardware Interface > Iambic/Memory** and enable
@@ -167,14 +175,69 @@ keyboard profile, forget the old device and pair again. The distinct name
 avoids confusing it with *Morse Tutor*, but changing the name alone does not
 clear a cached identity/bond on the same physical board.
 
+**Name migration:** iOS may keep displaying the former name, *Morse Paddle*,
+for an existing bond after the firmware rename. Reconnect first; if the label
+stays cached, forget that device on the iPhone and pair with **MorseBridge**.
+The rename does not erase bonds or change the HID report format or GPIO mapping.
+
 ## Diagnostics and behavior
 
 USB serial is 115200 baud, with **no boot wait and a zero write timeout**.
 Opening a serial monitor can reset some boards/USB configurations and interrupt
 BLE; reconnect and release both paddles afterward. Logging is best effort:
 without a reading host, messages may be dropped rather than delay keying.
-There are boot messages, BLE lifecycle/error messages and status transitions,
-not a log for every paddle edge or a continuous polling log.
+All firmware output uses one non-waiting writer guard and checks space for
+the entire message before writing. This avoids the Arduino 3.3.8 HWCDC
+full-buffer path, whose zero-timeout retry counter can underflow and stall
+when a USB cable is attached but no serial monitor is draining the output.
+BLE callbacks never wait for another log writer. Dropped lifecycle/error
+messages are counted and reported as `LOG: dropped ...` once space returns;
+current GPIO/BLE snapshots resume automatically.
+There are boot messages, BLE lifecycle/error messages and status transitions.
+Paddle diagnostics are currently enabled (`MORSEBRIDGE_DEBUG=1` in
+`MorseBridge/PaddleDebug.h`). Set that default to `0`, or compile with
+`-DMORSEBRIDGE_DEBUG=0`, to disable the additional snapshots.
+The former `MORSE_PADDLE_DEBUG` compile flag remains a compatibility alias.
+
+### Checking the jack and paddle over USB
+
+Open the board's serial port at **115200 baud**. No iPhone connection is needed
+to see the input levels, even if BLE startup fails. Press/release each paddle,
+then squeeze both. Expect:
+
+| Contact state | GPIO4 | GPIO5 |
+| --- | --- | --- |
+| Both released | HIGH | HIGH |
+| Dit held | LOW | HIGH |
+| Dah held | HIGH | LOW |
+| Both held | LOW | LOW |
+
+Example snapshot:
+
+```text
+DBG GPIO4=LOW GPIO5=HIGH edges=1/0 C=1 A=1 S=1 U=0 R=1 Q=2 M=01
+```
+
+`edges` counts **raw transitions** on GPIO4/GPIO5 since boot, including contact
+bounce; a short tap can increase the counters even if the sampled display has
+already returned to HIGH. Changes are summarized at most ten times per second,
+with a heartbeat every two seconds. The logger never waits for USB buffer
+space, and retains transition totals while there is no reading host.
+
+The BLE flags are `C` connected, `A` encrypted and bonded, `S` HID notifications
+subscribed, `U` host suspended, and `R` ready/armed. `Q` counts reports accepted
+by the local BLE stack since boot, **not confirmed delivery to Morse-it**.
+`M` is the last accepted report's modifier byte: `01` dit, `10` dah, `11` both,
+`00` released. It is historical, so check the connection flags alongside it.
+
+If neither input changes, check the **sleeve/common wire to GND**, the jack's
+tip/ring lugs (not its switched lugs), and plug continuity with power unplugged.
+If an input stays LOW with the paddle released, check for a short or incorrect
+jack lug; the firmware cannot arm until both inputs are HIGH. If the input
+levels change but `C/A/S/R` are not all `1` (or `U=1`), investigate the BLE
+connection, subscription or release-to-arm status before changing the wiring.
+If those flags are ready and `Q/M` change correctly, check Morse-it's keyboard
+mapping and event-viewer focus.
 
 | Serial status | Meaning |
 | --- | --- |
@@ -184,14 +247,39 @@ not a log for every paddle edge or a continuous polling log.
 | Ready | Encrypted, bonded, subscribed and armed |
 | ERROR | Read the preceding BLE error, then reset/power-cycle |
 
-The onboard RGB LED is **intentionally unused**, not a readiness indicator.
-Core `rgbLedWrite` waits for RMT completion; this firmware avoids that extra
-timing dependency. Diagnostics are serial-only, and normal use is headless.
+### Status light
+
+The onboard **GPIO21 RGB LED** lights at low brightness as soon as firmware starts:
+
+| Color | Meaning |
+| --- | --- |
+| Blue | Powered, starting BLE or waiting for the iPhone |
+| Amber | Connected, waiting for HID readiness or for both paddles to be released |
+| Green | BLE ready and paddles armed |
+| Red | BLE initialization, pairing, advertising or report error |
+
+The onboard LED uses **RGB byte order, not GRB**, as documented in the
+[Waveshare FAQ](https://docs.waveshare.com/ESP32-S3-Zero/FAQ).
+Using GRB swaps ready/green and error/red.
+
+The color changes only with status, never on each paddle press. A persistent
+WS2812 frame is sent using asynchronous RMT, so the paddle loop does not wait
+for LED transmission. A transmit failure or 20 ms completion timeout logs an
+error and disables further LED updates without stopping BLE. The last color
+can remain latched after such a failure; check Serial if its meaning is unclear.
+The LED is a firmware indicator, not an independent power-good indicator: it
+may remain off in the ROM bootloader or if startup/LED hardware fails.
+
+The advertising watchdog reports an error only after advertising has been
+continuously absent for two seconds without a connection. Normal advertising
+shutdown just before a connection callback is not itself an error.
 
 Contacts debounce independently for 5 ms on each edge. The loop yields for
 1 ms; BLE scheduling adds latency, so this is not a hard real-time wired keyer.
 A new connection, resubscription or resume sends neutral before arming and
-requires both contacts released. Failed notifications retry at 10 ms intervals,
+requires both contacts released. Security and subscription callbacks received
+before the connection callback are retained; disconnect clears them for the
+next session. Failed notifications retry at 10 ms intervals,
 with three consecutive failures causing an explicit error and disconnect to
 release keys. Normal disconnects restart advertising automatically. Initialization
 and services are retained instead of allocating new services on reconnect.
@@ -207,6 +295,24 @@ They simulate the BLE API; they do not prove over-the-air pairing or latency.
 Before relying on this build, verify on the actual S3 board: first pairing,
 individual holds/releases and squeeze in Morse-it, reconnect/power-cycle with
 both paddles held, resume, and operation on USB power without a computer.
+
+## Enclosure prototype
+
+The editable **MorseBridge** enclosure generator and fitting notes are in
+[`enclosure/`](enclosure/). Generate the current V4 pair with:
+
+```sh
+python3 -m venv .venv-enclosure
+.venv-enclosure/bin/pip install -r enclosure/requirements.txt
+.venv-enclosure/bin/python enclosure/prototype.py --output build/enclosure
+```
+
+Outputs are `morsebridge_base_38inside_v4.stl` and
+`morsebridge_lid_38inside_v4.stl`: 38 mm internal length, 8.2 mm floor-to-lid
+clearance, 24 mm outside width. The USB-C opening is rounded 9.5 x 3.4 mm,
+the jack opening is 6 mm diameter, and the LED opening is 3 mm diameter.
+Read `enclosure/FIT-CHECK.txt` before printing: physical fit, LED alignment,
+and final mechanical retention are not qualified.
 
 ## Provenance and license
 

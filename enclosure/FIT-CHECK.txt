@@ -1,0 +1,91 @@
+MORSEBRIDGE ENCLOSURE - V4 FIT-CHECK PROTOTYPE
+
+Reference: user-supplied obj_1_Body1.stl and obj_2_Body2.stl.
+These originals are not modified. This is an editable rebuild inspired by their
+rounded shape, not a mesh patch or compatible spare lid.
+Print BOTH new parts together; do not combine the new base with the original lid.
+
+PROPOSED LAYOUT (all measurements in mm)
+Requested length interpreted as 38 INTERNAL, not external.
+The supplied caliper photo reads 38.0 across the laid-out assembly.
+Requested minimum height interpreted as 8.2 from floor to underside of lid.
+Outside: 41.2 long x 24 wide x 11.4 high, including lid.
+Base height: 9.8. Wall, floor and lid roof thickness: 1.6.
+Nominal cavity: 38 x 20.8, before internal supports and corner radii.
+Floor-to-lid clearance: 8.2; supports/skirt occupy local portions of this space.
+USB-C at one short end, paddle jack at the opposite short end.
+Board envelope: 23.5 x 18, with no pin headers.
+Jack housing reserve: 14 x 12 x 5, based conservatively on supplied drawing.
+Separate board/jack supports, only 0.2 mm nominal longitudinal gap.
+Each component has 0.15 mm nominal clearance at its adjacent end wall.
+This is a tight nominal layout, not a tolerance-qualified fit. Measure real parts.
+Wire route is beside/under the components. Keep wire loops and jack metal away
+from the antenna as far as practicable; test BLE range in the assembled case.
+
+THIS IS NOT YET A GUARANTEED FIT
+The supplied XIAO case has an approximately 18 mm-wide cavity at mid-height.
+That gives the 18 mm Waveshare board no width clearance, so scaling or using
+the original internal mounts is inappropriate.
+
+The USB cutout follows the ORIGINAL case's rounded profile: 9.5 wide x 3.4 high
+with 1.5 corner radii. These dimensions were measured from end-wall sections
+of both original case halves. This replaces the oversized 12 x 6 rectangle.
+Its centre stays at 5.4 above the bottom of this case, since the Waveshare
+board supports differ from the original XIAO mounts. Confirm port elevation,
+USB connector overhang, and the actual cable's plastic overmould.
+The jack wall opening is ROUND, exactly 6.0 nominal diameter as requested.
+This is for the jack's outer barrel, NOT the 3.5 mm plug. No extra print-fit
+allowance has been added: a nominal 6 mm barrel may require hole compensation
+or careful finishing. Verify protrusion, housing and terminal lengths.
+The jack cradle is lowered to 0.4 above the floor because the supplied photo
+shows its terminals facing UP. There is 2.8 above the nominal 5 mm housing,
+including a provisional 2.5 solder/terminal allowance plus 0.3 lid clearance.
+Solder joints, bent terminals and insulation must fit within that allowance.
+Board ledges may need moving to avoid components or soldered GPIO wires.
+The wide lid slot is replaced with a ROUND 3.0 mm LED viewing hole.
+Its centre is provisionally X=14.5 from the OUTSIDE USB-end face and Y=12 from
+the outside long side: the old slot centre, NOT a verified LED measurement.
+Measure the actual fitted LED before printing the final lid and adjust LED_X
+and LED_Y in prototype.py. This opening is not a sealed light pipe.
+The USB-C opening is a rounded rectangle; the jack opening at the opposite end
+is circular. The 6 mm jack bore and 3 mm LED hole are unchanged from V3.
+BOOT/RESET access is by removing the lid.
+
+LID AND RETENTION
+The lid has a locating skirt with 0.25 clearance per side. It is deliberately
+NOT represented as a snap-fit or mechanically secure production closure.
+Use removable tape for the first bench fit; do not rely on this lid to retain
+the assembly during field use. Final snap tabs or fastening require a fit test.
+The jack has a low saddle and side guides, with space above for soldered leads.
+The earlier rear stop and lid rib are removed to avoid component interference.
+The lid skirt is relieved above the jack. Verify plug insertion and removal
+loads; soldered pins must not serve as mechanical retention.
+The PCB has edge supports and side guides but no qualified top clamp yet.
+
+FIRST PRINT
+Use 0.4 nozzle, 0.16 or 0.20 layers, 4 walls, and 15-20% infill as a starting
+point. PLA is suitable for a bench fit; PETG is preferable for a tougher final
+case after recalibrating clearances. Avoid leaving PLA in a hot vehicle.
+STLs are already oriented: base floor down; lid outer face down, skirt up.
+Inspect the slicer's USB/jack opening bridges; add local supports if needed.
+No printer command is issued by this generator.
+
+CHECK BEFORE POWER
+Disconnect USB while fitting. Insulate every soldered joint and terminal.
+Check that the jack housing, not its terminals, takes plug insertion force.
+Confirm the lid does not push on components, antenna, buttons or solder joints.
+Confirm USB plug seating, both paddle inputs, LED visibility and BLE range.
+
+LENGTH AND HEIGHT INTERPRETATION
+38 external length would leave only 34.8 internally with these walls, too short
+for the nominal 37.5 combined board/jack length. V4 therefore uses 38 inside.
+8.2 external height would not leave 8.2 for parts. V4 uses 8.2 clear height,
+plus the 1.6 floor and 1.6 lid, for 11.4 overall.
+V1, V2 and V3 outputs remain unchanged in their separate Downloads folders.
+Earlier exports may retain the historical Morse Paddle name.
+Current files: morsebridge_base_38inside_v4.stl and morsebridge_lid_38inside_v4.stl.
+
+SOURCE
+prototype.py exposes geometry parameters and generates the two STLs.
+Dependencies: manifold3d, trimesh and networkx. mesh-checks.json records mesh checks,
+not proof that real parts or printer tolerances fit.

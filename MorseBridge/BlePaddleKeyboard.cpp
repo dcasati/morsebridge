@@ -1,5 +1,6 @@
 #include "BlePaddleKeyboard.h"
 #include "PaddleInput.h"
+#include "PaddleLog.h"
 
 #include <Arduino.h>
 #include <BLEDevice.h>
@@ -8,7 +9,7 @@
 #include <atomic>
 
 #if !defined(CONFIG_IDF_TARGET_ESP32S3) || !defined(CONFIG_NIMBLE_ENABLED)
-#error "Morse Paddle requires ESP32-S3 with the Arduino 3.3.8 NimBLE stack"
+#error "MorseBridge requires ESP32-S3 with the Arduino 3.3.8 NimBLE stack"
 #endif
 
 namespace MorseBle {
@@ -44,7 +45,10 @@ uint8_t lastModifiers = 0xFF;
 uint32_t lastAttempt = 0;
 uint32_t observedEpoch = 0;
 uint8_t reportFailures = 0;
-uint32_t advertisingStartedAt = 0;
+bool advertisingMissing = false;
+uint32_t advertisingMissingSince = 0;
+uint32_t queuedReports = 0;
+uint8_t lastQueuedModifiers = 0;
 
 bool ready() {
   return active && connected && authenticated && !suspended && !failed
@@ -58,25 +62,25 @@ void clearReport() {
 
 void advertisingComplete(BLEAdvertising *) {
   if (active && !connected) {
-    failed = true;
-    Serial.println("BLE: advertising stopped unexpectedly; restart the ESP32");
+    // Advertising can stop before the connection callback becomes visible.
+    // The loop checks for a sustained outage instead of latching an error here.
+    PaddleLog::println("BLE: advertising ended; checking for connection");
   }
 }
 
 bool startAdvertising() {
-  advertisingStartedAt = millis();
+  advertisingMissing = false;
   // NimBLE returns the start result synchronously, unlike Bluedroid GAP events.
   if (BLEDevice::getAdvertising()->start(0, advertisingComplete)) return true;
   failed = true;
-  Serial.println("BLE: advertising request failed");
+  PaddleLog::println("BLE: advertising request failed");
   return false;
 }
 
 class ServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer *device, ble_gap_conn_desc *desc) override {
-    authenticated = false;
-    subscribed = false;
-    suspended = false;
+    // These are cleared before advertising and on disconnect. Do not erase
+    // security/subscription events that arrived before this callback.
     clearReport();
     connected = true;
     ++connectionEpoch;
@@ -84,19 +88,20 @@ class ServerCallbacks : public BLEServerCallbacks {
       device->disconnect(desc->conn_handle);
       return;
     }
-    Serial.println("BLE: connected; waiting for encrypted HID subscription");
+    PaddleLog::println("BLE: connected; waiting for encrypted HID subscription");
     if (!device->requestConnParams(desc->conn_handle, 12, 24, 0, 400)) {
-      Serial.println("BLE: connection interval request failed; using host interval");
+      PaddleLog::println("BLE: connection interval request failed; using host interval");
     }
   }
 
   void onDisconnect(BLEServer *) override {
     authenticated = false;
     subscribed = false;
+    suspended = false;
     connected = false;
     ++connectionEpoch;
     restartAdvertising = active.load();
-    Serial.println("BLE: disconnected");
+    PaddleLog::println("BLE: disconnected");
   }
 };
 
@@ -110,11 +115,11 @@ class SecurityCallbacks : public BLESecurityCallbacks {
     authenticated = desc->sec_state.encrypted && desc->sec_state.bonded;
     if (!authenticated) {
       failed = true;
-      Serial.printf("BLE: pairing failed (encrypted=%u, bonded=%u); forget device and restart\n",
+      PaddleLog::printf("BLE: pairing failed (encrypted=%u, bonded=%u); forget device and restart\n",
                     unsigned(desc->sec_state.encrypted), unsigned(desc->sec_state.bonded));
       server->disconnect(desc->conn_handle);
     } else {
-      Serial.println("BLE: encrypted and bonded");
+      PaddleLog::println("BLE: encrypted and bonded");
     }
   }
 };
@@ -129,7 +134,7 @@ class ReportCallbacks : public BLECharacteristicCallbacks {
   void onStatus(BLECharacteristic *, Status result, uint32_t code) override {
     reportAccepted = result == SUCCESS_NOTIFY;
     if (result != SUCCESS_NOTIFY) {
-      Serial.printf("BLE: HID notification failed (%d, %lu)\n",
+      PaddleLog::printf("BLE: HID notification failed (%d, %lu)\n",
                     int(result), static_cast<unsigned long>(code));
     }
   }
@@ -153,20 +158,25 @@ bool sendReport(const KeyboardReport &report) {
   input->setValue(reinterpret_cast<const uint8_t *>(&report), sizeof(report));
   reportAccepted = false;
   input->notify();
-  return reportAccepted.load();
+  const bool accepted = reportAccepted.load();
+  if (accepted) {
+    ++queuedReports;
+    lastQueuedModifiers = report.modifiers;
+  }
+  return accepted;
 }
 
 }
 
 bool begin() {
   if (connected || (initialized && BLEDevice::getAdvertising()->isAdvertising())) {
-    Serial.println("BLE: previous session is still closing; restart if it persists");
+    PaddleLog::println("BLE: previous session is still closing; restart if it persists");
     return false;
   }
   if (!initialized) {
-    if (!BLEDevice::init("Morse Paddle")) {
+    if (!BLEDevice::init("MorseBridge")) {
       failed = true;
-      Serial.println("BLE: initialization failed");
+      PaddleLog::println("BLE: initialization failed");
       return false;
     }
     static BLESecurity security;
@@ -177,7 +187,7 @@ bool begin() {
     server->setCallbacks(&serverCallbacks);
     server->advertiseOnDisconnect(false);
     auto *hid = new BLEHIDDevice(server);
-    hid->manufacturer()->setValue("Morse Paddle");
+    hid->manufacturer()->setValue("MorseBridge");
     // Unassigned vendor/product IDs; do not impersonate a commercial keyboard.
     hid->pnp(0x02, 0x0000, 0x0000, 0x0100);
     hid->hidInfo(0x00, 0x02);
@@ -199,6 +209,9 @@ bool begin() {
     initialized = true;
   }
   failed = false;
+  authenticated = false;
+  subscribed = false;
+  suspended = false;
   active = true;
   restartAdvertising = false;
   wasReady = false;
@@ -207,10 +220,10 @@ bool begin() {
   if (!startAdvertising()) {
     active = false;
     failed = true;
-    Serial.println("BLE: advertising failed");
+    PaddleLog::println("BLE: advertising failed");
     return false;
   }
-  Serial.println("BLE: pair with Morse Paddle in iPhone Bluetooth settings");
+  PaddleLog::println("BLE: pair with MorseBridge in iPhone Bluetooth settings");
   return true;
 }
 
@@ -219,14 +232,20 @@ void update(bool ditDown, bool dahDown) {
   if (restartAdvertising.exchange(false) && !failed && !connected) {
     if (!startAdvertising()) {
       failed = true;
-      Serial.println("BLE: could not restart advertising; restart the ESP32");
+      PaddleLog::println("BLE: could not restart advertising; restart the ESP32");
     }
   }
   const uint32_t now = millis();
-  if (!connected && !BLEDevice::getAdvertising()->isAdvertising() && !failed
-      && uint32_t(now - advertisingStartedAt) >= 2000) {
-    failed = true;
-    Serial.println("BLE: not advertising; restart the ESP32");
+  if (!connected && !BLEDevice::getAdvertising()->isAdvertising() && !failed) {
+    if (!advertisingMissing) {
+      advertisingMissing = true;
+      advertisingMissingSince = now;
+    } else if (uint32_t(now - advertisingMissingSince) >= 2000 && !connected) {
+      failed = true;
+      PaddleLog::println("BLE: not advertising for 2 seconds; restart the ESP32");
+    }
+  } else {
+    advertisingMissing = false;
   }
   const uint32_t epoch = connectionEpoch.load();
   if (!ready()) {
@@ -254,7 +273,7 @@ void update(bool ditDown, bool dahDown) {
       reportFailures = 0;
     } else if (++reportFailures >= 3) {
       failed = true;
-      Serial.println("BLE: repeated HID failures; disconnecting to release keys");
+      PaddleLog::println("BLE: repeated HID failures; disconnecting to release keys");
       server->disconnect(server->getConnId());
     }
   }
@@ -267,6 +286,12 @@ Status status() {
   return paddles.isArmed() ? Status::Ready : Status::ReleasePaddles;
 }
 
+Diagnostics diagnostics() {
+  return {connected.load(), authenticated.load(), subscribed.load(),
+          suspended.load(), ready() && paddles.isArmed(),
+          queuedReports, lastQueuedModifiers};
+}
+
 bool end() {
   if (!initialized) return true;
   // Stop accepting connections before disconnecting, including a connection
@@ -274,7 +299,7 @@ bool end() {
   active = false;
   restartAdvertising = false;
   bool success = BLEDevice::getAdvertising()->stop();
-  if (!success) Serial.println("BLE: failed to stop advertising");
+  if (!success) PaddleLog::println("BLE: failed to stop advertising");
   if (connected) {
     if (authenticated && subscribed) {
       const KeyboardReport neutral;
@@ -283,7 +308,7 @@ bool end() {
         released = sendReport(neutral);
         delay(30);
       }
-      if (!released) Serial.println("BLE: release failed; forcing disconnect");
+      if (!released) PaddleLog::println("BLE: release failed; forcing disconnect");
     }
     server->disconnect(server->getConnId());
   }
@@ -291,7 +316,7 @@ bool end() {
   while ((connected || BLEDevice::getAdvertising()->isAdvertising())
          && uint32_t(millis() - started) < 1000) delay(1);
   if (connected || BLEDevice::getAdvertising()->isAdvertising()) {
-    Serial.println("BLE: shutdown timed out; restart the ESP32");
+    PaddleLog::println("BLE: shutdown timed out; restart the ESP32");
     success = false;
   }
   clearReport();
