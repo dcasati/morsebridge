@@ -14,7 +14,10 @@ sidetone. No display, menus or standalone computer are needed when using a phone
 
 ## How it connects
 
-![Wiring: paddle jack tip to GPIO4, ring to GPIO5, sleeve to GND on the ESP32-S3-Zero; USB or Bluetooth connects MorseBridge to a Morse app. A charger or power bank supplies power for Bluetooth use.](assets/morsebridge-wiring.svg)
+[![ESP32-S3-Zero component-side wiring: jack tip to GPIO4 for dit, ring to GPIO5 for dah, and sleeve to GND, with USB-C at the top.](assets/morsebridge-board-wiring.png)](assets/morsebridge-board-wiring.svg)
+
+**USB-C is at the top; the board's component side faces you.** Jack terminals
+are symbolic: identify the actual tip, ring and sleeve lugs with a continuity meter.
 
 **USB takes priority when a host configures it.** With a charger or power bank,
 use Bluetooth instead. Only one connection sends paddle input at a time.
@@ -76,7 +79,7 @@ before installing the electronics.
 [Build, flash and BOOT recovery](docs/guide.md#build) |
 [Troubleshooting](docs/guide.md#diagnostics-and-behavior) |
 [BLE-only rollback](docs/guide.md#ble-only-rollback) |
-[Editable wiring diagram](assets/morsebridge-wiring.excalidraw)
+[Editable wiring diagram](assets/morsebridge-board-wiring.excalidraw)
 
 ## License
 
