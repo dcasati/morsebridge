@@ -392,7 +392,8 @@ the jack opening is 6 mm diameter, and the LED opening is 3 mm diameter.
 V6 keeps the four PCB pads and USB-end guides removed, retaining the jack cradle.
 The lid uses two flexible snap clips with catches and side release slots, plus
 a shorter locating lip with 0.4 mm clearance per side. Print both V6 parts;
-earlier lids are not compatible. PETG and an empty-case fit test are recommended.
+earlier lids are not compatible. The prototype was printed in PLA+; PETG is
+also an option. Dry-fit the empty case before installing electronics.
 The LED hole centre is moved 1 mm toward USB-C, to 13.5 mm from that end.
 USB opening height is unchanged; the PCB needs separate insulated retention.
 Read `enclosure/FIT-CHECK.txt` before printing: physical fit, LED alignment,

@@ -63,9 +63,9 @@ Use a charger or power bank when you want Bluetooth input on another device.
 
 **45 x 24 x 16 mm enclosure**, with a snap-fit lid and release slots.
 
-Download and print the linked base and lid as a matching pair. PETG is
-recommended. This is a prototype: check fit and clip strength before
-installing the electronics.
+Download and print the linked base and lid as a matching pair. The prototype
+was printed in **PLA+**; **PETG is also an option**. Check fit and clip strength
+before installing the electronics.
 
 [Base STL](enclosure/v6/morsebridge_base_45x24x16_v6.stl) |
 [Lid STL](enclosure/v6/morsebridge_lid_45x24x16_v6.stl) |

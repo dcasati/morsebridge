@@ -65,8 +65,9 @@ The clip bottoms sit above the nominal PCB envelope, not beneath it.
 PRINT BOTH V6 PARTS. Older lids lack these catches/clips and are not compatible.
 This is a geometric snap-fit design, not a physically qualified closure:
 material, layer adhesion and actual extrusion determine force and durability.
-Use PETG for the clip-bearing lid. Dry-fit the empty case first, without
-electronics. Press gently above both clips until they engage; do not force it.
+The prototype was printed in PLA+; PETG is also an option.
+Dry-fit the empty case first, without electronics. Press gently above both
+clips until they engage; do not force it.
 For removal, with USB disconnected, push the clips inward through the side
 slots using a small blunt nonconductive tool while gently lifting the lid.
 Do not drive a tool through the case toward the electronics.
@@ -81,8 +82,9 @@ PCB retention is not provided or qualified.
 
 FIRST PRINT
 Use 0.4 nozzle, 0.16 or 0.20 layers, 4 walls, and 15-20% infill as a starting
-point. PETG is recommended for the flexible snap clips; PLA clips may be brittle,
-particularly across layer lines. Avoid leaving PLA in a hot vehicle.
+point. PLA+ was used for the prototype; PETG is an alternative. Clip durability
+depends on the filament formulation, print settings and layer adhesion.
+Avoid leaving PLA/PLA+ in a hot vehicle.
 STLs are already oriented: base floor down; lid outer face down, lip/clips up.
 Inspect USB/jack bridges, catch roofs and hook shoulders in the slicer; use
 local removable supports if needed. Completely clean the moving clip gaps.
