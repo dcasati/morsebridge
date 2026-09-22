@@ -9,8 +9,8 @@
 
 #define CONFIG_IDF_TARGET_ESP32S3 1
 #define CONFIG_NIMBLE_ENABLED 1
-#define ARDUINO_USB_CDC_ON_BOOT 1
-#define ARDUINO_USB_MODE 1
+#define ARDUINO_USB_CDC_ON_BOOT 0
+#define ARDUINO_USB_MODE 0
 
 constexpr int INPUT_PULLUP = 2;
 constexpr int LOW = 0;
@@ -40,17 +40,23 @@ struct FakeSerial {
   int txSpace = 256;
   bool consumeSpace = false;
   void (*onWrite)() = nullptr;
+  std::string pendingLine;
   std::vector<std::string> lines;
   void begin(unsigned rate) { baud = rate; }
   void setTxTimeoutMs(uint32_t ms) { timeout = ms; }
   int availableForWrite() { return txSpace; }
   size_t write(const uint8_t *data, size_t size) {
-    // The real HWCDC zero-timeout path can hang if asked to exceed this space.
+    // Never exceed available FIFO capacity; USB packets may split a log line.
     assert(txSpace >= 0 && size <= static_cast<size_t>(txSpace));
     if (onWrite) onWrite();
     const size_t written = size < static_cast<size_t>(txSpace)
         ? size : static_cast<size_t>(txSpace);
-    lines.emplace_back(reinterpret_cast<const char *>(data), written);
+    pendingLine.append(reinterpret_cast<const char *>(data), written);
+    size_t newline;
+    while ((newline = pendingLine.find('\n')) != std::string::npos) {
+      lines.push_back(pendingLine.substr(0, newline + 1));
+      pendingLine.erase(0, newline + 1);
+    }
     if (consumeSpace) txSpace -= static_cast<int>(written);
     return written;
   }

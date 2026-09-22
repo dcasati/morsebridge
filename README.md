@@ -1,30 +1,27 @@
 # MorseBridge
 
 A headless **Waveshare ESP32-S3-Zero** adapter that sends a passive iambic
-paddle to **Morse-it on iPhone as a BLE HID keyboard**. It starts advertising as
+paddle to **Morse-it on iPhone as a USB or BLE HID keyboard**. It starts advertising as
 **MorseBridge** automatically at power-on. No menu, display or computer is
 needed during use.
 
 The adapter sends debounced contact states, not Morse characters or timed
-elements. **Morse-it generates the iambic timing and sidetone.** Native USB-C is
-only for programming, diagnostic serial and power: this is **not a wired USB
-HID keyboard**. There is no local keyer, sidetone, trainer, SD support, Wi-Fi or
-ESP-NOW.
+elements. **Morse-it generates the iambic timing and sidetone.** Native USB-C
+provides a wired HID keyboard plus diagnostic serial, programming and power.
+**A configured USB host takes priority over BLE.** A charger or power-only
+cable leaves BLE available. There is no local keyer, sidetone, trainer, SD
+support, Wi-Fi or ESP-NOW.
 
 Repository: [dcasati/morsebridge](https://github.com/dcasati/morsebridge).
 The product name covers future key interfaces, but **this firmware still
 supports iambic paddles only**; straight-key mode has not been implemented.
 
-**Validation status:** host tests and the complete ESP32-S3 firmware build pass.
-The S3 firmware has been flashed and observed starting BLE on the physical
-board. USB diagnostics have confirmed both GPIO inputs changing on paddle
-press/release, an encrypted/bonded/subscribed BLE connection, and accepted
-Left/Right Control and release reports. The user has also confirmed that paddle
-events appear in Morse-it on the iPhone. These observations do not replace the
-remaining reconnect, power-bank and timing acceptance checks below.
-Its report/debounce behavior comes from an ESP32 implementation already used
-with actual paddles in Morse-it; the S3 BLE backend adaptation still needs the
-hardware acceptance checks below.
+**Experimental branch:** `feature/usb-ble-hid`. The previous BLE-only build
+(`c055d0d`) was flashed and used successfully with paddles in Morse-it.
+The dual-transport build passes host tests and the pinned ESP32-S3 build, but
+**has not yet been flashed or verified with an iPhone**. USB enumeration,
+actual wired modifier events and physical handoffs still require the hardware
+acceptance checks below; simulated transports cannot establish iOS compatibility.
 
 ## Hardware and wiring
 
@@ -81,7 +78,7 @@ installation from other projects.
 Exact tested FQBN (also used by `scripts/build.sh`):
 
 ```sh
-FQBN='esp32:esp32:esp32s3:USBMode=hwcdc,CDCOnBoot=cdc,MSCOnBoot=default,DFUOnBoot=default,UploadMode=default,CPUFreq=240,FlashMode=qio,FlashSize=4M,PartitionScheme=huge_app,PSRAM=enabled,DebugLevel=none,EraseFlash=none'
+FQBN='esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=default,MSCOnBoot=default,DFUOnBoot=default,UploadMode=default,CPUFreq=240,FlashMode=qio,FlashSize=4M,PartitionScheme=huge_app,PSRAM=enabled,DebugLevel=none,EraseFlash=none'
 arduino-cli compile --fqbn "$FQBN" --warnings all \
   --build-path "$PWD/build/esp32s3" MorseBridge
 ```
@@ -92,8 +89,8 @@ Equivalent Arduino IDE selections:
 | --- | --- |
 | Board | ESP32S3 Dev Module |
 | ESP32 package version | 3.3.8 |
-| USB Mode | Hardware CDC and JTAG |
-| USB CDC On Boot | Enabled |
+| USB Mode | USB-OTG (TinyUSB) |
+| USB CDC On Boot | Disabled (firmware starts diagnostic CDC manually) |
 | USB Firmware MSC / DFU On Boot | Disabled |
 | Upload Mode | UART0 / Hardware CDC |
 | CPU Frequency | 240 MHz |
@@ -108,6 +105,10 @@ and no OTA updater is implemented. Build output is ignored by Git under
 `build/esp32s3/`, including `MorseBridge.ino.bin`, its ELF, bootloader, partition
 table and merged image. Use the CLI upload command below so all images go to
 their correct offsets, rather than flashing the app binary at address zero.
+HID and diagnostic CDC are registered before `USB.begin()`: do not enable CDC
+on boot or change to Hardware CDC/JTAG. The sketch rejects those settings.
+The prototype retains Arduino's default Espressif USB VID/PID; these are not a
+commercial VID/PID assignment for MorseBridge.
 
 **S3 backend note:** core 3.3.8 builds ESP32-S3 with **NimBLE**, whereas the
 original ESP32 transport used Bluedroid. This project uses the core's unified
@@ -148,19 +149,60 @@ Upload* for one upload, then restore Disabled. This removes **all** board data,
 including bonds, not just the application. No erase is performed by the build
 script, and there is no bond-reset button gesture or serial command.
 
+### BLE-only rollback
+
+The known BLE-only version is commit `c055d0d675da2caa005ef69cd9abcd4ecbf71870`.
+Build it separately without switching branches or disturbing current edits:
+
+```sh
+mkdir -p build/ble-rollback
+git archive c055d0d675da2caa005ef69cd9abcd4ecbf71870 MorseBridge scripts/build.sh \
+  | tar -x -C build/ble-rollback
+(cd build/ble-rollback && bash scripts/build.sh)
+```
+
+Enter BOOT mode as described above, select its port and upload the rollback
+images using the **old** USB configuration:
+
+```sh
+BLE_FQBN='esp32:esp32:esp32s3:USBMode=hwcdc,CDCOnBoot=cdc,MSCOnBoot=default,DFUOnBoot=default,UploadMode=default,CPUFreq=240,FlashMode=qio,FlashSize=4M,PartitionScheme=huge_app,PSRAM=enabled,DebugLevel=none,EraseFlash=none'
+arduino-cli upload --fqbn "$BLE_FQBN" --port "$PORT" \
+  --input-dir "$PWD/build/ble-rollback/build/esp32s3" build/ble-rollback/MorseBridge
+```
+
 ## iPhone and Morse-it
 
-1. Power the board. In iPhone **Settings > Bluetooth**, pair with **MorseBridge**.
-   Pairing uses bonded, encrypted JustWorks with no passcode entry. JustWorks
-   does not provide MITM protection; pair in a trusted environment.
+1. **Wired:** connect the board directly to the unlocked iPhone 15 Pro Max with
+   a USB-C **data** cable; Bluetooth pairing is not required. Expect cyan after
+   releasing the paddles. Follow any iOS accessory-unlock prompt.
+   **Wireless:** power from a charger/power bank, then pair with **MorseBridge**
+   in iPhone **Settings > Bluetooth**. Expect green after release. Pairing uses
+   bonded, encrypted JustWorks without MITM protection; pair in a trusted place.
 2. In Morse-it, open **Settings > Hardware Interface > Iambic/Memory** and enable
    **Keyboard Enabled**. Set **Dot = Left Control**, **Dash = Right Control**.
 3. Set **Key Type = Iambic A** or **Iambic B** to match your preference, and choose
    speed/sidetone settings in Morse-it.
 4. Open **Tap** or **Start Sending Trainer**. In a keyboard event viewer, tap
    its text area to give it focus before trying the paddles.
-5. Release **both** paddles after connection (and after resume or subscription
-   changes) to arm, then send normally.
+5. Release **both** paddles after connection, route changes, resume or
+   subscription changes to arm, then send normally.
+
+### Automatic transport selection
+
+USB is selected only when its host configures the device, not from cable power,
+CDC DTR or an open serial monitor. Both transports may remain connected, but
+paddle presses go to only one. During a BLE-to-USB handoff, BLE gets a neutral
+report first; if it cannot accept the release, the firmware requests a BLE
+disconnect and waits for that callback before enabling USB reports. Each newly
+selected route sends neutral and waits for both contacts to be released.
+
+**A Mac/PC data connection selects USB too**, even if you only wanted a serial
+monitor. To use BLE with the iPhone, power the board from a charger/power bank
+instead. A suspended USB host retains priority (amber) until resume or USB
+unmount; the firmware does not send duplicate keys through BLE during sleep.
+If the board loses power when unplugged, it restarts when powered again.
+With independent power, USB unmount permits BLE fallback; without VBUS sensing,
+loss of data wires alone may look like host suspension rather than unmount.
 
 Left Control is modifier `0x01`, Right Control is `0x10`, and a squeeze is
 `0x11`. Each report has exactly eight bytes: modifier, zero reserved byte, six
@@ -182,18 +224,20 @@ The rename does not erase bonds or change the HID report format or GPIO mapping.
 
 ## Diagnostics and behavior
 
-USB serial is 115200 baud, with **no boot wait and a zero write timeout**.
+USB diagnostic CDC is 115200 baud, with **no boot wait or host-delivery wait**.
 Opening a serial monitor can reset some boards/USB configurations and interrupt
 BLE; reconnect and release both paddles afterward. Logging is best effort:
 without a reading host, messages may be dropped rather than delay keying.
-All firmware output uses one non-waiting writer guard and checks space for
-the entire message before writing. This avoids the Arduino 3.3.8 HWCDC
-full-buffer path, whose zero-timeout retry counter can underflow and stall
-when a USB cable is attached but no serial monitor is draining the output.
+All firmware output uses one non-waiting writer guard and reserves a complete
+line in a fixed 192-byte buffer, draining it in FIFO-sized chunks without
+interleaving other lines. The pinned core's CDC TX FIFO is only 64 bytes.
+Queuing directly to TinyUSB avoids both the old
+HWCDC full-buffer stall and core 3.3.8's `USBCDC::write` behavior that drops all
+writes with a zero timeout. No code waits for the host to consume diagnostics.
 BLE callbacks never wait for another log writer. Dropped lifecycle/error
 messages are counted and reported as `LOG: dropped ...` once space returns;
-current GPIO/BLE snapshots resume automatically.
-There are boot messages, BLE lifecycle/error messages and status transitions.
+current GPIO/USB/BLE snapshots resume automatically.
+There are boot messages, USB/BLE error messages and status transitions.
 Paddle diagnostics are currently enabled (`MORSEBRIDGE_DEBUG=1` in
 `MorseBridge/PaddleDebug.h`). Set that default to `0`, or compile with
 `-DMORSEBRIDGE_DEBUG=0`, to disable the additional snapshots.
@@ -215,7 +259,7 @@ then squeeze both. Expect:
 Example snapshot:
 
 ```text
-DBG GPIO4=LOW GPIO5=HIGH edges=1/0 C=1 A=1 S=1 U=0 R=1 Q=2 M=01
+DBG GPIO4=LOW GPIO5=HIGH edges=1/0 C=1 A=1 S=1 U=0 R=0 Q=1 M=00 T=USB UC=1 US=0 UR=1 UQ=2 UM=01
 ```
 
 `edges` counts **raw transitions** on GPIO4/GPIO5 since boot, including contact
@@ -229,23 +273,28 @@ subscribed, `U` host suspended, and `R` ready/armed. `Q` counts reports accepted
 by the local BLE stack since boot, **not confirmed delivery to Morse-it**.
 `M` is the last accepted report's modifier byte: `01` dit, `10` dah, `11` both,
 `00` released. It is historical, so check the connection flags alongside it.
+`T` is the selected route (`USB`, `BLE`, `NONE`); `UC` is USB configured,
+`US` is USB suspended, `UR` is USB armed, `UQ` counts locally queued USB reports,
+and `UM` is their last modifier byte. USB counters also do **not** confirm
+delivery to Morse-it. On a working USB route, BLE `R=0` is expected even when
+Bluetooth is still connected.
 
 If neither input changes, check the **sleeve/common wire to GND**, the jack's
 tip/ring lugs (not its switched lugs), and plug continuity with power unplugged.
 If an input stays LOW with the paddle released, check for a short or incorrect
 jack lug; the firmware cannot arm until both inputs are HIGH. If the input
-levels change but `C/A/S/R` are not all `1` (or `U=1`), investigate the BLE
-connection, subscription or release-to-arm status before changing the wiring.
-If those flags are ready and `Q/M` change correctly, check Morse-it's keyboard
-mapping and event-viewer focus.
+levels change, check the selected route: USB needs `UC=1 US=0 UR=1`; BLE needs
+`C/A/S/R=1 U=0`. If its report counters/modifiers change correctly, check the
+host receiving those reports, Morse-it's keyboard mapping and event-viewer focus.
 
 | Serial status | Meaning |
 | --- | --- |
-| Waiting | Advertising / waiting for iPhone |
-| Connected, waiting for HID subscription or resume | Link exists but reports are not ready |
+| Waiting | Waiting for USB configuration or BLE connection |
+| Waiting for HID subscription, route release, or USB resume | Link exists but reports are not ready |
 | Release BOTH paddles | Initial neutral report/released contacts required |
-| Ready | Encrypted, bonded, subscribed and armed |
-| ERROR | Read the preceding BLE error, then reset/power-cycle |
+| BLE ready | Encrypted, bonded, subscribed and armed |
+| USB ready | Configured, awake and armed; BLE paddle reports suppressed |
+| ERROR | Read the preceding USB/BLE error, then reset/power-cycle |
 
 ### Status light
 
@@ -253,10 +302,11 @@ The onboard **GPIO21 RGB LED** lights at low brightness as soon as firmware star
 
 | Color | Meaning |
 | --- | --- |
-| Blue | Powered, starting BLE or waiting for the iPhone |
-| Amber | Connected, waiting for HID readiness or for both paddles to be released |
+| Blue | Powered, waiting for a USB host or BLE connection |
+| Amber | Waiting for HID readiness, old-route release, USB resume or paddle release |
 | Green | BLE ready and paddles armed |
-| Red | BLE initialization, pairing, advertising or report error |
+| Cyan | USB ready and paddles armed |
+| Red | Selected/available route initialization, pairing, advertising or report error |
 
 The onboard LED uses **RGB byte order, not GRB**, as documented in the
 [Waveshare FAQ](https://docs.waveshare.com/ESP32-S3-Zero/FAQ).
@@ -265,7 +315,7 @@ Using GRB swaps ready/green and error/red.
 The color changes only with status, never on each paddle press. A persistent
 WS2812 frame is sent using asynchronous RMT, so the paddle loop does not wait
 for LED transmission. A transmit failure or 20 ms completion timeout logs an
-error and disables further LED updates without stopping BLE. The last color
+error and disables further LED updates without stopping HID. The last color
 can remain latched after such a failure; check Serial if its meaning is unclear.
 The LED is a firmware indicator, not an independent power-good indicator: it
 may remain off in the ROM bootloader or if startup/LED hardware fails.
@@ -275,8 +325,8 @@ continuously absent for two seconds without a connection. Normal advertising
 shutdown just before a connection callback is not itself an error.
 
 Contacts debounce independently for 5 ms on each edge. The loop yields for
-1 ms; BLE scheduling adds latency, so this is not a hard real-time wired keyer.
-A new connection, resubscription or resume sends neutral before arming and
+1 ms; BLE/USB scheduling adds latency, so this is not a hard real-time keyer.
+A new connection, selected route, resubscription or resume sends neutral before arming and
 requires both contacts released. Security and subscription callbacks received
 before the connection callback are retained; disconnect clears them for the
 next session. Failed notifications retry at 10 ms intervals,
@@ -285,16 +335,32 @@ release keys. Normal disconnects restart advertising automatically. Initializati
 and services are retained instead of allocating new services on reconnect.
 Pairing failures and advertising failures latch an error rather than silently
 pretending to be ready or repeatedly restarting.
+USB uses the same eight-byte report and ID 1 (ID 0 in boot protocol).
+USB reports queue without waiting for host completion. Busy endpoints retry
+without resetting debounce; a pending report blocked for 250 ms, or three
+consecutive queue failures at 10 ms intervals, latches an error and detaches
+USB to release the host's keyboard state. Reset is required to restore a
+faulted transport. A failure on an unused transport does not stop a healthy
+selected one; consult diagnostic error messages.
 
 The host tests cover debounce/bounce, rollover, hold/release/squeeze report bytes,
 bond/encryption/subscription gating, reconnection, suspend/resume, neutral-send
 failure, service reuse, bounded notification failures, advertising failures and
 the actual sketch's host-independent startup/GPIO mapping/status logging.
-They simulate the BLE API; they do not prove over-the-air pairing or latency.
+Dual-route cases cover USB-only, BLE-only/power-only, both hosts, held-paddle
+handoffs, delayed BLE disconnects, failed releases, USB busy/failure/boot
+protocol, unplug/replug, suspend/resume, and missing/full diagnostic CDC.
+They simulate both APIs; they do not prove USB enumeration, iOS recognition,
+over-the-air pairing or latency.
 
 Before relying on this build, verify on the actual S3 board: first pairing,
 individual holds/releases and squeeze in Morse-it, reconnect/power-cycle with
 both paddles held, resume, and operation on USB power without a computer.
+For the experimental wired mode, verify USB HID + CDC enumeration on a computer
+without opening a monitor; direct USB-C/iPhone Morse-it input with Bluetooth
+off; both transports connected with no double-keying; cyan versus green route
+indication; handoffs while held; and recovery through BOOT mode. Do not interpret
+successful USB enumeration alone as successful Morse-it input.
 
 ## Enclosure prototype
 

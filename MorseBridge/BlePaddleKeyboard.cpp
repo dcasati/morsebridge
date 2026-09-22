@@ -1,6 +1,8 @@
 #include "BlePaddleKeyboard.h"
 #include "PaddleInput.h"
 #include "PaddleLog.h"
+#include "ReportSession.h"
+#include "KeyboardDescriptor.h"
 
 #include <Arduino.h>
 #include <BLEDevice.h>
@@ -15,18 +17,6 @@
 namespace MorseBle {
 namespace {
 
-// Standard keyboard report: modifiers, reserved byte, six key usages.
-uint8_t reportMap[] = {
-  0x05, 0x01, 0x09, 0x06, 0xA1, 0x01, 0x85, 0x01,
-  0x05, 0x07, 0x19, 0xE0, 0x29, 0xE7, 0x15, 0x00,
-  0x25, 0x01, 0x75, 0x01, 0x95, 0x08, 0x81, 0x02,
-  0x95, 0x01, 0x75, 0x08, 0x81, 0x01,
-  0x95, 0x05, 0x75, 0x01, 0x05, 0x08, 0x19, 0x01,
-  0x29, 0x05, 0x91, 0x02, 0x95, 0x01, 0x75, 0x03, 0x91, 0x01,
-  0x95, 0x06, 0x75, 0x08, 0x15, 0x00, 0x25, 0x65,
-  0x05, 0x07, 0x19, 0x00, 0x29, 0x65, 0x81, 0x00, 0xC0
-};
-
 BLEServer *server = nullptr;
 BLECharacteristic *input = nullptr;
 std::atomic<bool> subscribed{false};
@@ -38,13 +28,8 @@ std::atomic<bool> restartAdvertising{false};
 std::atomic<bool> failed{false};
 std::atomic<bool> reportAccepted{false};
 std::atomic<uint32_t> connectionEpoch{0};
-PaddleInput paddles;
+MorseBridge::ReportSession session;
 bool initialized = false;
-bool wasReady = false;
-uint8_t lastModifiers = 0xFF;
-uint32_t lastAttempt = 0;
-uint32_t observedEpoch = 0;
-uint8_t reportFailures = 0;
 bool advertisingMissing = false;
 uint32_t advertisingMissingSince = 0;
 uint32_t queuedReports = 0;
@@ -191,7 +176,7 @@ bool begin() {
     // Unassigned vendor/product IDs; do not impersonate a commercial keyboard.
     hid->pnp(0x02, 0x0000, 0x0000, 0x0100);
     hid->hidInfo(0x00, 0x02);
-    hid->reportMap(reportMap, sizeof(reportMap));
+    hid->reportMap(MorseBridge::keyboardDescriptor, sizeof(MorseBridge::keyboardDescriptor));
     input = hid->inputReport(1);
     input->setCallbacks(&reportCallbacks);
     clearReport();
@@ -214,8 +199,7 @@ bool begin() {
   suspended = false;
   active = true;
   restartAdvertising = false;
-  wasReady = false;
-  paddles.reset(millis());
+  session.reset(millis());
   clearReport();
   if (!startAdvertising()) {
     active = false;
@@ -227,7 +211,7 @@ bool begin() {
   return true;
 }
 
-void update(bool ditDown, bool dahDown) {
+void update(bool ditDown, bool dahDown, bool selected) {
   if (!active) return;
   if (restartAdvertising.exchange(false) && !failed && !connected) {
     if (!startAdvertising()) {
@@ -247,48 +231,33 @@ void update(bool ditDown, bool dahDown) {
   } else {
     advertisingMissing = false;
   }
-  const uint32_t epoch = connectionEpoch.load();
-  if (!ready()) {
-    wasReady = false;
-    paddles.reset(now);
-    return;
-  }
-  if (!wasReady || epoch != observedEpoch) {
-    paddles.reset(now);
-    lastModifiers = 0xFF;
-    lastAttempt = now - 10;
-    reportFailures = 0;
-    observedEpoch = epoch;
-    wasReady = true;
-  }
-  // Do not arm until the initial neutral notification has actually succeeded.
-  const KeyboardReport report = lastModifiers == 0xFF
-      ? KeyboardReport{} : paddles.sample(ditDown, dahDown, now);
-  if (report.modifiers != lastModifiers
-      && (reportFailures == 0 || uint32_t(now - lastAttempt) >= 10)) {
-    lastAttempt = now;
-    if (sendReport(report)) {
-      if (lastModifiers == 0xFF) paddles.reset(now);
-      lastModifiers = report.modifiers;
-      reportFailures = 0;
-    } else if (++reportFailures >= 3) {
+  session.update(ditDown, dahDown, now, selected, connected, ready(), connectionEpoch,
+    [](const KeyboardReport &report) {
+      return sendReport(report) ? MorseBridge::SendResult::Accepted
+                                : MorseBridge::SendResult::Failed;
+    },
+    [] {
+      if (failed) return;
       failed = true;
-      PaddleLog::println("BLE: repeated HID failures; disconnecting to release keys");
+      PaddleLog::println("BLE: HID release/send failed; disconnecting to release keys");
       server->disconnect(server->getConnId());
-    }
-  }
+    });
+}
+
+bool released() {
+  return session.released(connected);
 }
 
 Status status() {
   if (failed) return Status::Error;
   if (!connected) return Status::Waiting;
   if (!ready()) return Status::Connecting;
-  return paddles.isArmed() ? Status::Ready : Status::ReleasePaddles;
+  return session.armed() ? Status::Ready : Status::ReleasePaddles;
 }
 
 Diagnostics diagnostics() {
   return {connected.load(), authenticated.load(), subscribed.load(),
-          suspended.load(), ready() && paddles.isArmed(),
+          suspended.load(), ready() && session.armed(),
           queuedReports, lastQueuedModifiers};
 }
 
@@ -320,8 +289,7 @@ bool end() {
     success = false;
   }
   clearReport();
-  wasReady = false;
-  paddles.reset(millis());
+  session.reset(millis());
   return success;
 }
 

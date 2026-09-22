@@ -35,8 +35,9 @@ int main() {
   assert(Fake::now == 0);
   Serial.txSpace = 16;
   debug.sample(false, false, 2400, ble);
-  assert(Serial.lines.size() == 3);  // Don't knowingly emit partial lines.
+  assert(Serial.lines.size() == 3);  // Partial packet retained, not interleaved.
   Serial.txSpace = 256;
+  PaddleLog::poll();
   debug.sample(false, false, 2500, ble);
   assert(contains("edges=4/4"));
 

@@ -4,7 +4,7 @@
 
 namespace MorseBle {
 
-enum class Status { Waiting, Connecting, ReleasePaddles, Ready, Error };
+enum class Status { Waiting, Connecting, ReleasePaddles, Ready, UsbReady, Error };
 
 struct Diagnostics {
   bool connected;
@@ -17,7 +17,8 @@ struct Diagnostics {
 };
 
 bool begin();
-void update(bool ditDown, bool dahDown);
+void update(bool ditDown, bool dahDown, bool selected = true);
+bool released();
 bool end();
 Status status();
 Diagnostics diagnostics();

@@ -29,6 +29,8 @@ int main() {
   assert(color() == 0x080400);
   led.update(Status::ReleasePaddles, 101);
   assert(FakeRmt::frames.size() == 2);
+  led.update(Status::UsbReady, 101);
+  assert(color() == 0x000808);
   led.update(Status::Ready, 102);
   assert(color() == 0x000800);  // S3-Zero green is the second byte, not the first.
   led.update(Status::Error, 103);

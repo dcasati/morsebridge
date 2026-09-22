@@ -10,7 +10,7 @@ public:
   void begin() {
     enabled = rmtInit(pin, RMT_TX_MODE, RMT_MEM_NUM_BLOCKS_1, 10000000);
     PaddleLog::println(enabled ? "LED: GPIO21 status indicator enabled"
-                           : "LED: initialization failed; BLE remains available");
+                           : "LED: initialization failed; HID remains available");
   }
 
   void update(MorseBle::Status status, uint32_t now) {
@@ -56,6 +56,7 @@ private:
       case MorseBle::Status::Connecting:
       case MorseBle::Status::ReleasePaddles: return 0x080400; // Dim amber.
       case MorseBle::Status::Ready: return 0x000800;          // Dim green.
+      case MorseBle::Status::UsbReady: return 0x000808;       // Dim cyan.
       case MorseBle::Status::Error: return 0x080000;          // Dim red.
     }
     return 0x080000;

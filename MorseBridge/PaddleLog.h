@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstdarg>
 #include <cstdio>
+#include "DebugSerial.h"
 
 namespace PaddleLog {
 
@@ -12,11 +13,10 @@ inline std::atomic<uint32_t> dropped{0};
 
 inline bool tryWrite(const char *text, size_t length) {
   if (writing.test_and_set()) return false;
-  // HWCDC 3.3.8 can underflow its zero-timeout retry counter on a full buffer.
-  // Serialize all producers and reserve enough room by checking before writing.
-  const int space = Serial.availableForWrite();
+  // Serialize producers; never enter a full-buffer write path or wait for a host.
+  const int space = DebugSerial.availableForWrite();
   const bool sent = space >= 0 && static_cast<size_t>(space) >= length
-      && Serial.write(reinterpret_cast<const uint8_t *>(text), length) == length;
+      && DebugSerial.write(reinterpret_cast<const uint8_t *>(text), length) == length;
   writing.clear();
   return sent;
 }
@@ -38,6 +38,10 @@ inline void println(const char *text) {
 }
 
 inline void poll() {
+  if (!writing.test_and_set()) {
+    dropped.fetch_add(DebugSerial.poll());
+    writing.clear();
+  }
   const uint32_t count = dropped.load();
   if (!count) return;
   char line[80];

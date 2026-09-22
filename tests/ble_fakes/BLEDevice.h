@@ -61,6 +61,9 @@ public:
 class BLEServer {
 public:
   BLEServerCallbacks *callbacks = nullptr;
+  bool deferDisconnect = false;
+  bool disconnectPending = false;
+  unsigned disconnects = 0;
   void setCallbacks(BLEServerCallbacks *cb) { callbacks = cb; }
   void advertiseOnDisconnect(bool enabled) { assert(!enabled); }
   bool requestConnParams(uint16_t, int min, int max, int latency, int) {
@@ -68,7 +71,15 @@ public:
     return true;
   }
   uint16_t getConnId() { return 1; }
-  void disconnect(uint16_t) { callbacks->onDisconnect(this); }
+  void completeDisconnect() {
+    disconnectPending = false;
+    callbacks->onDisconnect(this);
+  }
+  void disconnect(uint16_t) {
+    ++disconnects;
+    disconnectPending = true;
+    if (!deferDisconnect) completeDisconnect();
+  }
   void connect() {
     Fake::advertising = false;
     ble_gap_conn_desc param;
