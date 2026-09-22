@@ -59,6 +59,10 @@ service reports a fixed 100% for this USB-powered device.
 
 ## Build
 
+For a prebuilt binary, use the [latest firmware release](https://github.com/dcasati/morsebridge/releases/latest)
+and [release flashing instructions](flashing.md). The steps below are for
+building from source.
+
 Use **Arduino ESP32 core 3.3.8**, which includes the BLE library. Do not install
 a third-party `ESP32 BLE Keyboard` or `NimBLE-Arduino` library for this sketch.
 The build script checks the installed core version and does not install or

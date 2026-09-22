@@ -29,7 +29,8 @@ paddle, a 3.5 mm TRS jack and a USB-C data cable.
 
 1. **Wire the jack:** tip to **GPIO4** (dit), ring to **GPIO5** (dah), sleeve to
    **GND**. Verify the jack's lug mapping before soldering.
-2. **Flash the firmware** using the [build and upload guide](docs/guide.md#build).
+2. **Download the [latest firmware release](https://github.com/dcasati/morsebridge/releases/latest)**
+   and follow the [flashing instructions](docs/flashing.md). No compiling required.
 3. **Connect:** use a USB-C data cable to your phone/computer, or power from a
    charger/power bank and pair with **MorseBridge** over Bluetooth.
 4. **Configure the app:** enable keyboard/paddle input, set **dit = Left Control**
