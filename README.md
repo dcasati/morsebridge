@@ -1,12 +1,12 @@
 # MorseBridge
 
 A headless **Waveshare ESP32-S3-Zero** adapter that sends a passive iambic
-paddle to **Morse-it on iPhone as a USB or BLE HID keyboard**. It starts advertising as
+paddle to **compatible Morse applications as a USB or BLE HID keyboard**. It starts advertising as
 **MorseBridge** automatically at power-on. No menu, display or computer is
 needed during use.
 
 The adapter sends debounced contact states, not Morse characters or timed
-elements. **Morse-it generates the iambic timing and sidetone.** Native USB-C
+elements. **The receiving application generates the iambic timing and sidetone.** Native USB-C
 provides a wired HID keyboard plus diagnostic serial, programming and power.
 **A configured USB host takes priority over BLE.** A charger or power-only
 cable leaves BLE available. There is no local keyer, sidetone, trainer, SD
@@ -23,9 +23,25 @@ Firmware `70bdd09` was flashed on the S3 on 2026-09-22 without erasing NVS.
 macOS recognizes **MorseBridge as a USB HID keyboard** with diagnostic CDC.
 Live diagnostics show USB configured, awake and armed, a queued neutral report,
 and the existing bonded BLE connection retained with BLE paddle reports disabled.
-**Wired iPhone/Morse-it input has not yet been verified.** Actual paddle events
-over USB and physical handoffs still require the hardware acceptance checks
-below; enumeration alone cannot establish iOS/Morse-it compatibility.
+Application compatibility is user-confirmed below. Exact transport/platform
+combinations and physical handoffs remain to be recorded; enumeration alone
+does not establish application compatibility.
+
+## Known-working applications
+
+Confirmed working by the user on 2026-09-22:
+
+| Application | Link |
+| --- | --- |
+| Morse Code Complete: Learn CW | [App Store](https://apps.apple.com/ca/app/morse-code-complete-learn-cw/id6759272226) |
+| Morse-It | [App Store](https://apps.apple.com/ca/app/morse-it/id284942940) |
+| VBand | [Web application](https://hamradio.solutions/vband/) |
+
+These are user-reported results, not a claim that every USB/BLE, device or
+browser combination has been tested. Connection mode and platform versions
+have not been recorded per application. MorseBridge sends **Left Control for
+dit** and **Right Control for dah**; configure the receiving application's
+keyboard/paddle input accordingly.
 
 ## Hardware and wiring
 
