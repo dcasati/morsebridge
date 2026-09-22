@@ -389,8 +389,16 @@ successful USB enumeration alone as successful Morse-it input.
 
 ## Enclosure prototype
 
+Download the **V6 fit-check prototype** without running the generator:
+[base STL](enclosure/v6/morsebridge_base_45x24x16_v6.stl) |
+[lid STL](enclosure/v6/morsebridge_lid_45x24x16_v6.stl) |
+[mesh-check report](enclosure/v6/mesh-checks.json).
+On each STL's GitHub page, use **Download raw file** to save it for your slicer.
+Print both V6 parts together and read the [fit notes](enclosure/FIT-CHECK.txt)
+first. These are nominal geometry checks, not a guarantee of physical fit.
+
 The editable **MorseBridge** enclosure generator and fitting notes are in
-[`enclosure/`](enclosure/). Generate the current V4 pair with:
+[`enclosure/`](enclosure/). Generate the current V6 pair with:
 
 ```sh
 python3 -m venv .venv-enclosure
@@ -398,10 +406,17 @@ python3 -m venv .venv-enclosure
 .venv-enclosure/bin/python enclosure/prototype.py --output build/enclosure
 ```
 
-Outputs are `morsebridge_base_38inside_v4.stl` and
-`morsebridge_lid_38inside_v4.stl`: 38 mm internal length, 8.2 mm floor-to-lid
-clearance, 24 mm outside width. The USB-C opening is rounded 9.5 x 3.4 mm,
+Outputs are `morsebridge_base_45x24x16_v6.stl` and
+`morsebridge_lid_45x24x16_v6.stl`: **45 x 24 x 16 mm assembled outside**,
+41.8 mm internal length and 12.8 mm floor-to-lid clearance.
+The USB-C opening is rounded 9.5 x 3.4 mm,
 the jack opening is 6 mm diameter, and the LED opening is 3 mm diameter.
+V6 keeps the four PCB pads and USB-end guides removed, retaining the jack cradle.
+The lid uses two flexible snap clips with catches and side release slots, plus
+a shorter locating lip with 0.4 mm clearance per side. Print both V6 parts;
+earlier lids are not compatible. PETG and an empty-case fit test are recommended.
+The LED hole centre is moved 1 mm toward USB-C, to 13.5 mm from that end.
+USB opening height is unchanged; the PCB needs separate insulated retention.
 Read `enclosure/FIT-CHECK.txt` before printing: physical fit, LED alignment,
 and final mechanical retention are not qualified.
 

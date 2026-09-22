@@ -1,0 +1,63 @@
+{
+  "project": "MorseBridge",
+  "pcb_supports": "Removed: four pads and two USB-end guides; jack cradle retained",
+  "qualification": "FIT-CHECK PROTOTYPE ONLY; physical fit not verified",
+  "assembled_size_mm": [
+    45.0,
+    24.0,
+    16.0
+  ],
+  "wall_mm": 1.6,
+  "nominal_cavity_xy_mm": [
+    41.8,
+    20.8
+  ],
+  "floor_to_lid_clearance_mm": 12.8,
+  "jack_to_lid_clearance_mm": 7.4,
+  "clearance_above_terminal_allowance_mm": 4.9,
+  "board_to_jack_gap_mm": 4.0,
+  "lid_clearance_per_side_mm": 0.4,
+  "lid_closure": "Two flexible snap hooks with recessed catches and side release slots",
+  "locating_lip_depth_mm": 1.2,
+  "snap_engagement_mm": 0.4500000000000002,
+  "snap_beam_length_mm": 6.4,
+  "snap_beam_thickness_mm": 0.8,
+  "jack_opening_diameter_mm": 6.0,
+  "usb_opening_width_height_mm": [
+    9.5,
+    3.4
+  ],
+  "usb_corner_radius_mm": 1.5,
+  "usb_centre_height_mm": 5.4,
+  "led_opening_diameter_mm": 3.0,
+  "led_opening_centre_xy_mm": [
+    13.5,
+    12.0
+  ],
+  "led_alignment": "Moved 1 mm toward USB-C; physical alignment still needs checking",
+  "checks": "Watertight, positive volume, single shell, consistent winding; nominal board/jack envelopes clear base and assembled lid",
+  "parts": [
+    {
+      "file": "morsebridge_base_45x24x16_v6.stl",
+      "size_mm": [
+        45.0,
+        24.0,
+        14.399999618530273
+      ],
+      "volume_mm3": 4368.851867712353,
+      "triangles": 824,
+      "watertight": true
+    },
+    {
+      "file": "morsebridge_lid_45x24x16_v6.stl",
+      "size_mm": [
+        45.0,
+        24.0,
+        8.0
+      ],
+      "volume_mm3": 1850.5102308319322,
+      "triangles": 816,
+      "watertight": true
+    }
+  ]
+}

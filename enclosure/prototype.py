@@ -15,19 +15,29 @@ import manifold3d as m
 import trimesh
 
 
-INTERNAL_LENGTH = 38.0
-INTERNAL_HEIGHT = 8.2
+LENGTH = 45.0
+HEIGHT = 16.0
 WIDTH = 24.0
 WALL = 1.6
 FLOOR = 1.6
 ROOF = 1.6
-LENGTH = INTERNAL_LENGTH + 2 * WALL
-HEIGHT = INTERNAL_HEIGHT + FLOOR + ROOF
+INTERNAL_LENGTH = LENGTH - 2 * WALL
+INTERNAL_HEIGHT = HEIGHT - FLOOR - ROOF
 RADIUS = 3.0
-LID_GAP = 0.25  # Per side; a locating lid, not a qualified snap fit.
+LID_GAP = 0.4
 SKIRT = 0.8
-SKIRT_DEPTH = 2.0
+SKIRT_DEPTH = 1.2
 BODY_HEIGHT = HEIGHT - ROOF
+CLIP_X = LENGTH / 2
+CLIP_WIDTH = 5.0
+CLIP_THICKNESS = 0.8
+CLIP_BOTTOM = 8.0
+HOOK_OUTER_Y = 1.15
+HOOK_BOTTOM = 8.15
+HOOK_RAMP_TOP = 9.6
+HOOK_TOP = 9.85
+POCKET_BOTTOM = 8.0
+POCKET_TOP = 10.1
 BOARD_X = WALL + 0.15
 BOARD_Y = 3.0
 BOARD_Z = 3.2
@@ -42,7 +52,7 @@ JACK_Z = FLOOR + 0.4
 JACK_TERMINAL_HEIGHT = 2.5  # Provisional allowance above the housing, per photo.
 JACK_BORE = 6.0  # User-specified opening diameter; printer compensation not added.
 LED_BORE = 3.0
-LED_X = 14.5  # Provisional: old slot centre until the LED position is measured.
+LED_X = 13.5  # User requested 1 mm toward USB-C from the previous 14.5 mm.
 LED_Y = WIDTH / 2
 USB_WIDTH = 9.5
 USB_HEIGHT = 3.4
@@ -59,6 +69,33 @@ def rounded(x, y, z, dx, dy, dz, radius):
     section = m.CrossSection.square((dx - 2 * radius, dy - 2 * radius))
     section = section.offset(radius, circular_segments=32)
     return section.extrude(dz).translate((x + radius, y + radius, z))
+
+
+def opposite_side(solid):
+    return solid.mirror((0, 1, 0)).translate((0, WIDTH, 0))
+
+
+def snap_features():
+    tongue_y = WALL + LID_GAP
+    tongue = box(CLIP_X - CLIP_WIDTH / 2, tongue_y, CLIP_BOTTOM,
+                 CLIP_WIDTH, CLIP_THICKNESS, BODY_HEIGHT - CLIP_BOTTOM + 0.1)
+    # Positive winding in the local Y/Z profile; ramp leads into the side catch.
+    profile = m.CrossSection([[
+        (tongue_y + 0.05, HOOK_BOTTOM),
+        (tongue_y + 0.05, HOOK_TOP),
+        (HOOK_OUTER_Y, HOOK_TOP),
+        (HOOK_OUTER_Y, HOOK_RAMP_TOP),
+    ]])
+    hook = profile.extrude(CLIP_WIDTH).rotate((90, 0, 90)).translate(
+        (CLIP_X - CLIP_WIDTH / 2, 0, 0)
+    )
+    pocket = box(CLIP_X - CLIP_WIDTH / 2 - 0.4, 0.95, POCKET_BOTTOM,
+                 CLIP_WIDTH + 0.8, WALL - 0.95 + 0.2, POCKET_TOP - POCKET_BOTTOM)
+    release = box(CLIP_X - 1.5, -0.1, 8.65, 3, WALL + 0.3, 1)
+    lip_relief = box(CLIP_X - CLIP_WIDTH / 2 - 0.6, WALL + 0.1,
+                     BODY_HEIGHT - SKIRT_DEPTH - 0.1, CLIP_WIDTH + 1.2,
+                     LID_GAP + SKIRT + 0.5, SKIRT_DEPTH + 0.2)
+    return tongue, hook, pocket, release, lip_relief
 
 
 def export_mesh(solid, path):
@@ -87,13 +124,6 @@ def make_parts():
     )
     body = shell - cavity
 
-    # Small edge ledges leave the underside open for wiring/components.
-    for x in (4.0, 19.0):
-        for y in (2.3, 20.2):
-            body += box(x, y, FLOOR - 0.1, 2.5, 1.5, BOARD_Z - FLOOR + 0.1)
-    for y in (1.5, 21.4):
-        body += box(3, y, FLOOR - 0.1, 7, 1.1, 3.2)
-
     # Low saddle: the user's jack terminals and soldered wires face upward.
     for y in (JACK_Y - 0.8, JACK_Y + JACK_WIDTH - 0.4):
         body += box(JACK_X, y, FLOOR - 0.1,
@@ -112,6 +142,9 @@ def make_parts():
         (LENGTH - WALL - 1, WIDTH / 2, JACK_Z + JACK_HEIGHT / 2)
     )
     body = body - usb - barrel
+    tongue, hook, pocket, release, lip_relief = snap_features()
+    body = body - pocket - opposite_side(pocket)
+    body = body - release - opposite_side(release)
 
     lid = rounded(0, 0, BODY_HEIGHT, LENGTH, WIDTH, ROOF, RADIUS)
     inset = WALL + LID_GAP
@@ -123,12 +156,15 @@ def make_parts():
     skirt_inner = rounded(
         inset + SKIRT, inset + SKIRT, BODY_HEIGHT - SKIRT_DEPTH - 0.1,
         LENGTH - 2 * (inset + SKIRT), WIDTH - 2 * (inset + SKIRT),
-        SKIRT_DEPTH + 0.3, 0.3,
+        SKIRT_DEPTH + 0.3, RADIUS - inset - SKIRT,
     )
     # The short case puts the jack beneath the end skirt; relieve it locally.
     jack_relief = box(JACK_X - 0.1, JACK_Y - 1.2, FLOOR,
                       JACK_LENGTH + 0.4, JACK_WIDTH + 2.4, BODY_HEIGHT - FLOOR)
-    lid += skirt_outer - skirt_inner - jack_relief
+    lid += (skirt_outer - skirt_inner - jack_relief
+            - lip_relief - opposite_side(lip_relief))
+    clip = tongue + hook
+    lid += clip + opposite_side(clip)
     led_hole = m.Manifold.cylinder(
         ROOF + 0.2, LED_BORE / 2, circular_segments=64
     ).translate((LED_X, LED_Y, BODY_HEIGHT - 0.1))
@@ -147,13 +183,32 @@ def make_parts():
         assert (lid ^ solid).volume() < 1e-5, name + " intersects lid"
     assert (body ^ lid).volume() < 1e-5, "lid intersects base"
     assert (board ^ jack).volume() < 1e-5, "component envelopes overlap"
-    assert JACK_X - (BOARD_X + BOARD_LENGTH) >= 0.19
-    assert abs((LENGTH - 2 * WALL) - 38.0) < 1e-6
-    assert abs((BODY_HEIGHT - FLOOR) - 8.2) < 1e-6
+    assert JACK_X - (BOARD_X + BOARD_LENGTH) >= 3.9
+    assert abs(LENGTH - 45.0) < 1e-6
+    assert abs(HEIGHT - 16.0) < 1e-6
+    assert abs((LENGTH - 2 * WALL) - 41.8) < 1e-6
+    assert abs((BODY_HEIGHT - FLOOR) - 12.8) < 1e-6
+    assert abs(LED_X - 13.5) < 1e-6
+    # Seated hooks clear their pockets but resist lifting without inward flex.
+    for catch, direction in ((hook, 1), (opposite_side(hook), -1)):
+        assert catch.volume() > 0
+        assert (body ^ catch).volume() < 1e-5
+        assert (body ^ catch.translate((0, 0, 0.5))).volume() > 0.1
+        released = catch.translate((0, direction * 0.55, 0.5))
+        assert (body ^ released).volume() < 1e-5
+    assert CLIP_BOTTOM > BOARD_Z + 4.5
     assert BODY_HEIGHT - JACK_Z - JACK_HEIGHT >= 0.19
     assert BODY_HEIGHT - JACK_Z - JACK_HEIGHT - JACK_TERMINAL_HEIGHT >= 0.29
     assert (body ^ barrel).volume() < 1e-5, "jack bore obstructed"
     assert (body ^ usb).volume() < 1e-5, "USB bore obstructed"
+    # Keep the four former PCB pads and two USB-end guides clear above the floor.
+    for x in (4.0, 19.0):
+        for y in (2.3, 20.2):
+            cleared = box(x, y, FLOOR + 0.01, 2.5, 1.5, BOARD_Z - FLOOR - 0.01)
+            assert (body ^ cleared).volume() < 1e-5, "PCB pad remains"
+    for y in (1.7, 21.4):
+        cleared = box(3, y, FLOOR + 0.01, 7, 0.9, 3.09)
+        assert (body ^ cleared).volume() < 1e-5, "PCB guide remains"
     # Preserve material in the rounded corners and close the old oversized slot.
     for y, z in (((WIDTH - USB_WIDTH) / 2 + 0.1, USB_Z + 0.1),
                  (WIDTH / 2 - 5.8, USB_CENTRE_Z)):
@@ -176,11 +231,12 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     body, lid = make_parts()
     results = [
-        export_mesh(body, args.output / "morsebridge_base_38inside_v4.stl"),
-        export_mesh(lid, args.output / "morsebridge_lid_38inside_v4.stl"),
+        export_mesh(body, args.output / "morsebridge_base_45x24x16_v6.stl"),
+        export_mesh(lid, args.output / "morsebridge_lid_45x24x16_v6.stl"),
     ]
     report = {
         "project": "MorseBridge",
+        "pcb_supports": "Removed: four pads and two USB-end guides; jack cradle retained",
         "qualification": "FIT-CHECK PROTOTYPE ONLY; physical fit not verified",
         "assembled_size_mm": [LENGTH, WIDTH, HEIGHT],
         "wall_mm": WALL,
@@ -191,13 +247,18 @@ def main():
             BODY_HEIGHT - JACK_Z - JACK_HEIGHT - JACK_TERMINAL_HEIGHT,
         "board_to_jack_gap_mm": JACK_X - BOARD_X - BOARD_LENGTH,
         "lid_clearance_per_side_mm": LID_GAP,
+        "lid_closure": "Two flexible snap hooks with recessed catches and side release slots",
+        "locating_lip_depth_mm": SKIRT_DEPTH,
+        "snap_engagement_mm": WALL - HOOK_OUTER_Y,
+        "snap_beam_length_mm": BODY_HEIGHT - CLIP_BOTTOM,
+        "snap_beam_thickness_mm": CLIP_THICKNESS,
         "jack_opening_diameter_mm": JACK_BORE,
         "usb_opening_width_height_mm": [USB_WIDTH, USB_HEIGHT],
         "usb_corner_radius_mm": USB_RADIUS,
         "usb_centre_height_mm": USB_CENTRE_Z,
         "led_opening_diameter_mm": LED_BORE,
         "led_opening_centre_xy_mm": [LED_X, LED_Y],
-        "led_alignment": "Provisional old-slot centre; measure fitted LED before printing",
+        "led_alignment": "Moved 1 mm toward USB-C; physical alignment still needs checking",
         "checks": "Watertight, positive volume, single shell, consistent winding; "
                   "nominal board/jack envelopes clear base and assembled lid",
         "parts": results,
