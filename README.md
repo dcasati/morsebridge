@@ -18,10 +18,14 @@ supports iambic paddles only**; straight-key mode has not been implemented.
 
 **Experimental branch:** `feature/usb-ble-hid`. The previous BLE-only build
 (`c055d0d`) was flashed and used successfully with paddles in Morse-it.
-The dual-transport build passes host tests and the pinned ESP32-S3 build, but
-**has not yet been flashed or verified with an iPhone**. USB enumeration,
-actual wired modifier events and physical handoffs still require the hardware
-acceptance checks below; simulated transports cannot establish iOS compatibility.
+The dual-transport build passes host tests and the pinned ESP32-S3 build.
+Firmware `70bdd09` was flashed on the S3 on 2026-09-22 without erasing NVS.
+macOS recognizes **MorseBridge as a USB HID keyboard** with diagnostic CDC.
+Live diagnostics show USB configured, awake and armed, a queued neutral report,
+and the existing bonded BLE connection retained with BLE paddle reports disabled.
+**Wired iPhone/Morse-it input has not yet been verified.** Actual paddle events
+over USB and physical handoffs still require the hardware acceptance checks
+below; enumeration alone cannot establish iOS/Morse-it compatibility.
 
 ## Hardware and wiring
 
