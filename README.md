@@ -61,15 +61,15 @@ Use a charger or power bank when you want Bluetooth input on another device.
 
 ## Print a case
 
-**V6: 45 x 24 x 16 mm assembled**, with a snap-fit lid and release slots.
+**45 x 24 x 16 mm enclosure**, with a snap-fit lid and release slots.
+
+Download and print the linked base and lid as a matching pair. PETG is
+recommended. This is a prototype: check fit and clip strength before
+installing the electronics.
 
 [Base STL](enclosure/v6/morsebridge_base_45x24x16_v6.stl) |
 [Lid STL](enclosure/v6/morsebridge_lid_45x24x16_v6.stl) |
 [Printing and fit notes](enclosure/FIT-CHECK.txt)
-
-On GitHub, open each STL and choose **Download raw file**. Print **both V6 parts**;
-older lids are incompatible. This is a **fit-check prototype**: PETG is
-recommended, and physical fit and clip strength still need confirmation.
 
 ## Guides
 
