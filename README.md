@@ -1,5 +1,10 @@
 # MorseBridge
 
+[![MorseBridge - CW. CONNECTED.](assets/morsebridge-logo.png)](assets/morsebridge-logo.svg)
+
+Brand assets: [vector logo](assets/morsebridge-logo.svg) |
+[vector icon](assets/morsebridge-icon.svg) | [PNG icon](assets/morsebridge-icon.png).
+
 A headless **Waveshare ESP32-S3-Zero** adapter that sends a passive iambic
 paddle to **compatible Morse applications as a USB or BLE HID keyboard**. It starts advertising as
 **MorseBridge** automatically at power-on. No menu, display or computer is
@@ -16,7 +21,7 @@ Repository: [dcasati/morsebridge](https://github.com/dcasati/morsebridge).
 The product name covers future key interfaces, but **this firmware still
 supports iambic paddles only**; straight-key mode has not been implemented.
 
-**Experimental branch:** `feature/usb-ble-hid`. The previous BLE-only build
+**Firmware:** USB + BLE HID with automatic USB priority. The previous BLE-only build
 (`c055d0d`) was flashed and used successfully with paddles in Morse-it.
 The dual-transport build passes host tests and the pinned ESP32-S3 build.
 Firmware `70bdd09` was flashed on the S3 on 2026-09-22 without erasing NVS.
